@@ -1,0 +1,54 @@
+{
+  "formatVersion": 1,
+  "passTypeIdentifier": "pass.com.smokenchill.coupon",
+  "teamIdentifier": "YOUR_10_CHAR_TEAM_ID",
+  "organizationName": "Smoke N Chill @ Research",
+  "description": "Store Promotion Coupon",
+  "logoText": "Smoke N Chill #3",
+
+  "backgroundColor": "rgb(15, 23, 42)",
+  "foregroundColor": "rgb(248, 250, 252)",
+  "labelColor": "rgb(148, 163, 184)",
+
+  "coupon": {
+    "primaryFields": [
+      {
+        "key": "offer",
+        "label": "SPECIAL PROMO",
+        "value": "20% OFF"
+      }
+    ],
+    "secondaryFields": [
+      {
+        "key": "code",
+        "label": "COUPON CODE",
+        "value": "PROMO2026"
+      }
+    ],
+    "auxiliaryFields": [
+      {
+        "key": "expires",
+        "label": "EXPIRES",
+        "value": "Dec 31, 2026"
+      }
+    ]
+  },
+
+  "barcodes": [
+    {
+      "format": "PKBarcodeFormatQR",
+      "message": "PROMO2026",
+      "messageEncoding": "iso-8859-1",
+      "altText": "PROMO2026"
+    }
+  ],
+
+  "locations": [
+    {
+      "latitude": 30.2672,
+      "longitude": -97.7431,
+      "relevantText": "You are near Smoke N Chill! Open to use your 20% OFF coupon."
+    }
+  ],
+  "maxDistance": 16000
+}

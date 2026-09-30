@@ -1,0 +1,31 @@
+{
+  "name": "geofencing",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@neon/config": "^1.8.3",
+    "@neon/env": "^1.4.8",
+    "bcryptjs": "^3.0.3",
+    "canvas": "^3.2.3",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "google-auth-library": "^11.0.2",
+    "jsonwebtoken": "^9.0.3",
+    "passkit-generator": "^3.1.2",
+    "pg": "^8.23.0",
+    "socket.io": "^4.8.3"
+  },
+  "allowScripts": {
+    "canvas@3.2.3": true
+  }
+}
