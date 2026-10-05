@@ -201,7 +201,7 @@ function createGoogleWalletUrl(promo) {
             defaultValue: { language: 'en-US', value: promo.title }
           },
           logo: {
-            sourceUri: { uri: 'https://i.imgur.com/vH9X9xX.png' },
+            sourceUri: { uri: 'https://imgur.com/a/1I8rQ6d' },
             contentDescription: { defaultValue: { language: 'en-US', value: 'Smoke N Chill Logo' } }
           },
           heroImage: {
