@@ -152,15 +152,15 @@
   <!-- Age Verification Modal -->
   <div id="ageModal">
     <div class="modal-box">
-      <img src="https://i.imgur.com/vH9X9xX.png" style="width: 80px;" alt="Smoke N Chill @ Research" />
+      <img src="Snc3-logo.png" style="width: 80px;" alt="Smoke N Chill @ Research" />
       <h2>Age Verification</h2>
       <p style="color: #aaa; font-size: 0.9rem;">You must be 21 years or older to access Smoke N Chill @ Research in-store promotions.</p>
       <button class="btn" onclick="verifyAge()">I AM 21 OR OLDER</button>
     </div>
   </div>
 
-  <img class="header-logo" src="https://i.imgur.com/vH9X9xX.png" alt="Smoke N Chill @Research" />
-  <h2>SMOKE N CHILL</h2>
+  <img class="header-logo" src="Snc3-logo.png" alt="Smoke N Chill @Research" />
+  <h2>SMOKE N CHILL @ Research</h2>
   <div id="statusBadge" class="status-badge">Checking Geofence Location...</div>
 
   <div class="container" id="promosContainer">
@@ -228,7 +228,7 @@
       promos.forEach((p) => {
         const exp = new Date(p.expires_at).toLocaleDateString();
         container.innerHTML += `
-          <div class="promo-card">
+         <div class="promo-card">
             <div class="discount-tag">${p.discount_text}</div>
             <div class="promo-title">${p.title}</div>
             <div class="exp-date">Expires: ${exp}</div>
