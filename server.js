@@ -74,7 +74,6 @@ const pool = new Pool(poolConfig);
 
 async function initDb() {
   try {
-    // 1. Create Promotions Table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS promotions (
           id SERIAL PRIMARY KEY,
@@ -114,7 +113,6 @@ async function initDb() {
     `);
     console.log('[PostgreSQL] Database schema verified and migrated successfully.');
 
-    // 2. Seed Admin User after tables are guaranteed to exist
     await seedDefaultAdmin();
   } catch (err) {
     console.error('[PostgreSQL Migration Error]:', err.message);
@@ -154,7 +152,7 @@ const io = new Server(server, { cors: { origin: '*' } });
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname));
 
 // ==============================================
 // Helper Functions
@@ -233,9 +231,15 @@ function createGoogleWalletUrl(promo) {
 // Routes & Web Page Endpoints
 // ==============================================
 
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
-app.get('/cashier.html', (req, res) => res.sendFile(path.join(__dirname, 'public', 'cashier.html')));
-app.get('/admin.html', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+app.get('/cashier.html', (req, res) => res.sendFile(path.join(__dirname, 'cashier.html')));
+app.get('/admin.html', (req, res) => {
+  const adminPath = path.join(__dirname, 'admin.html');
+  if (fs.existsSync(adminPath)) {
+    return res.sendFile(adminPath);
+  }
+  return res.status(404).send('Admin page not found.');
+});
 
 // Fetch active unexpired promotions
 app.get('/api/promotions', async (req, res) => {
