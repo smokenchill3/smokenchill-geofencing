@@ -201,7 +201,7 @@ function createGoogleWalletUrl(promo) {
             defaultValue: { language: 'en-US', value: promo.title }
           },
           logo: {
-            sourceUri: { uri: 'https://imgur.com/a/1I8rQ6d' },
+            sourceUri: { uri: 'https://smokenchill-geofencing.onrender.com/Snc3-logo.png' },
             contentDescription: { defaultValue: { language: 'en-US', value: 'Smoke N Chill Logo' } }
           },
           heroImage: {
