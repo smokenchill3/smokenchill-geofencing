@@ -275,6 +275,35 @@ app.post('/api/promotions/toggle', async (req, res) => {
   }
 });
 
+// In-memory or database tracking for redeemed coupons
+const redeemedCoupons = new Set();
+
+// Cashier Verification Endpoint
+app.post('/api/cashier/redeem', (req, res) => {
+  const { code } = req.body;
+
+  if (!code) {
+    return res.status(400).json({ status: 'error', message: 'No code provided.' });
+  }
+
+  if (redeemedCoupons.has(code.toUpperCase())) {
+    return res.json({ 
+      valid: false, 
+      status: 'ALREADY_USED', 
+      message: '❌ Coupon has already been redeemed!' 
+    });
+  }
+
+  // Mark as redeemed
+  redeemedCoupons.add(code.toUpperCase());
+
+  return res.json({ 
+    valid: true, 
+    status: 'SUCCESS', 
+    message: `✅ Valid Coupon! Apply $5 OFF to ticket.` 
+  });
+});
+
 // Create or Update a Promotion
 app.post('/api/promotions/create', async (req, res) => {
   const { code, title, discount_text, expires_at } = req.body;
