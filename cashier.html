@@ -25,7 +25,11 @@
       align-items: center;
       gap: 15px;
     }
-    .brand img { width: 50px; }
+    .brand img { 
+      width: 50px; 
+      height: 50px;
+      object-fit: contain;
+    }
     
     .user-badge {
       background: #181824;
@@ -76,9 +80,12 @@
       font-size: 1rem;
       box-sizing: border-box;
     }
+    input[type="text"]:focus, input[type="password"]:focus {
+      outline: 2px solid #00ff87;
+    }
     .btn {
       width: 100%;
-      padding: 12px;
+      padding: 14px;
       background: #00ff87;
       color: #000;
       font-weight: bold;
@@ -87,6 +94,7 @@
       font-size: 1rem;
       cursor: pointer;
       margin-top: 15px;
+      transition: background 0.2s ease;
     }
     .btn:hover { background: #00e077; }
     .btn-secondary {
@@ -101,14 +109,16 @@
     .btn-secondary:hover { background: #3a3a52; }
 
     .alert {
-      padding: 12px;
+      padding: 15px;
       border-radius: 8px;
       margin-top: 15px;
       font-weight: bold;
+      font-size: 1.1rem;
+      text-align: center;
       display: none;
     }
-    .alert-success { background: rgba(0,255,135,0.2); border: 1px solid #00ff87; color: #00ff87; }
-    .alert-error { background: rgba(255,71,87,0.2); border: 1px solid #ff4757; color: #ff4757; }
+    .alert-success { background: rgba(0,255,135,0.2); border: 2px solid #00ff87; color: #00ff87; }
+    .alert-error { background: rgba(255,71,87,0.2); border: 2px solid #ff4757; color: #ff4757; }
 
     .toggle-row {
       display: flex;
@@ -135,310 +145,4 @@
     .btn-delete {
       background: rgba(255, 71, 87, 0.2);
       border: 1px solid #ff4757;
-      color: #ff4757;
-      padding: 6px 10px;
-      border-radius: 6px;
-      font-weight: bold;
-      cursor: pointer;
-    }
-
-    .form-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-    }
-    @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
-    
-    .login-overlay {
-      background: rgba(0,0,0,0.85);
-      border: 1px solid #ff4757;
-      padding: 15px;
-      border-radius: 8px;
-      color: #ff4757;
-      text-align: center;
-      margin-bottom: 15px;
-      font-weight: bold;
-    }
-  </style>
-</head>
-<body>
-
-  <div class="header">
-    <div class="brand">
-      <img src="https://i.imgur.com/vH9X9xX.png" alt="Logo" />
-      <h2>Smoke N Chill - Cashier & Admin Terminal</h2>
-    </div>
-    <div class="user-badge" id="authBadge">
-      🔒 Admin Locked
-    </div>
-  </div>
-
-  <div class="grid">
-    <!-- Panel 1: Admin Login Card -->
-    <div class="panel" id="loginPanel">
-      <h3>🔑 Admin / Manager Login</h3>
-      <p style="color: #aaa; font-size: 0.85rem; margin-top:0;">Log in to unlock promo creation and manage authorized users.</p>
-      
-      <div id="loginFormArea">
-        <label for="loginUser">Username</label>
-        <input type="text" id="loginUser" placeholder="admin" />
-        <label for="loginPass">Password</label>
-        <input type="password" id="loginPass" placeholder="••••••••" />
-        <button class="btn" onclick="loginAdmin()">LOG IN AS ADMIN</button>
-      </div>
-      <div id="loginAlert" class="alert"></div>
-    </div>
-
-    <!-- Panel 2: Register User Card (Admin Only) -->
-    <div class="panel panel-locked" id="addUserPanel">
-      <h3>👥 Add Authorized Admin User</h3>
-      <p style="color: #aaa; font-size: 0.85rem; margin-top:0;">Create sub-admin logins for shift managers to publish offers.</p>
-      
-      <label for="newAdminUser">New Username</label>
-      <input type="text" id="newAdminUser" placeholder="manager1" />
-      <label for="newAdminPass">New Password</label>
-      <input type="password" id="newAdminPass" placeholder="••••••••" />
-      <button class="btn" onclick="addAdminUser()">CREATE NEW USER</button>
-      <div id="addUserAlert" class="alert"></div>
-    </div>
-
-    <!-- Panel 3: Coupon Scanner & Redemption -->
-    <div class="panel">
-      <h3>Scan / Redeem Coupon Code</h3>
-      <label for="couponInput">Coupon Code or QR Scan</label>
-      <input type="text" id="couponInput" placeholder="Scan QR or enter code..." />
-      <button class="btn" onclick="redeemCoupon()">REDEEM COUPON</button>
-      <div id="resultAlert" class="alert"></div>
-    </div>
-
-    <!-- Panel 4: Promo Inventory & Disabling Controls -->
-    <div class="panel">
-      <h3>Store Inventory Controls</h3>
-      <p style="color: #aaa; font-size: 0.85rem; margin-top:0;">Toggle stock state or delete promotions. Changes update live.</p>
-      <div id="promoToggles"></div>
-    </div>
-
-    <!-- Panel 5: Create / Add New Promotion Special (Admin Only) -->
-    <div class="panel full-width panel-locked" id="createPromoPanel">
-      <h3>➕ Create New Special Offer</h3>
-      <div id="lockNotice" class="login-overlay">🔒 Admin Login Required Above to Publish Offers</div>
-      <p style="color: #aaa; font-size: 0.85rem; margin-top:0;">Add a new promotion directly to customer apps and Google Wallet pass system.</p>
-      
-      <div class="form-grid">
-        <div>
-          <label for="newCode">Promo Code (e.g. VIPGLASS25)</label>
-          <input type="text" id="newCode" placeholder="VIPGLASS25" />
-        </div>
-        <div>
-          <label for="newBadge">Discount Badge Text (e.g. 25% OFF)</label>
-          <input type="text" id="newBadge" placeholder="25% OFF" />
-        </div>
-        <div style="grid-column: 1 / -1;">
-          <label for="newTitle">Full Offer Title / Description</label>
-          <input type="text" id="newTitle" placeholder="25% Off Premium Glassware & Rig Setups" />
-        </div>
-        <div style="grid-column: 1 / -1;">
-          <label for="newExpires">Expiration Date & Time</label>
-          <input type="datetime-local" id="newExpires" />
-        </div>
-      </div>
-
-      <button class="btn" onclick="createPromo()">PUBLISH NEW PROMOTION</button>
-      <div id="createAlert" class="alert"></div>
-    </div>
-  </div>
-
-  <script>
-    let authToken = localStorage.getItem('adminToken') || null;
-    let authUser = localStorage.getItem('adminUser') || null;
-
-    const now = new Date();
-    now.setDate(now.getDate() + 30);
-    document.getElementById('newExpires').value = now.toISOString().slice(0, 16);
-
-    function updateAuthStateUI() {
-      const badge = document.getElementById('authBadge');
-      const addPanel = document.getElementById('addUserPanel');
-      const createPanel = document.getElementById('createPromoPanel');
-      const lockNotice = document.getElementById('lockNotice');
-      const loginFormArea = document.getElementById('loginFormArea');
-
-      if (authToken) {
-        badge.innerHTML = `👤 Logged in: <span>${authUser}</span> <button class="btn-secondary" onclick="logoutAdmin()">Logout</button>`;
-        addPanel.classList.remove('panel-locked');
-        createPanel.classList.remove('panel-locked');
-        lockNotice.style.display = 'none';
-        loginFormArea.style.display = 'none';
-      } else {
-        badge.innerHTML = `🔒 Admin Locked`;
-        addPanel.classList.add('panel-locked');
-        createPanel.classList.add('panel-locked');
-        lockNotice.style.display = 'block';
-        loginFormArea.style.display = 'block';
-      }
-    }
-
-    async function loginAdmin() {
-      const username = document.getElementById('loginUser').value.trim();
-      const password = document.getElementById('loginPass').value.trim();
-      const alertBox = document.getElementById('loginAlert');
-
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
-
-      const data = await res.json();
-      alertBox.style.display = 'block';
-      alertBox.className = 'alert ' + (data.success ? 'alert-success' : 'alert-error');
-      alertBox.innerText = data.message || (data.success ? 'Login successful!' : 'Login failed');
-
-      if (data.success) {
-        authToken = data.token;
-        authUser = data.username;
-        localStorage.setItem('adminToken', authToken);
-        localStorage.setItem('adminUser', authUser);
-        updateAuthStateUI();
-      }
-    }
-
-    function logoutAdmin() {
-      authToken = null;
-      authUser = null;
-      localStorage.removeItem('adminToken');
-      localStorage.removeItem('adminUser');
-      updateAuthStateUI();
-    }
-
-    async function addAdminUser() {
-      const newUsername = document.getElementById('newAdminUser').value.trim();
-      const newPassword = document.getElementById('newAdminPass').value.trim();
-      const alertBox = document.getElementById('addUserAlert');
-
-      const res = await fetch('/api/admin/add-user', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': authToken
-        },
-        body: JSON.stringify({ newUsername, newPassword })
-      });
-
-      const data = await res.json();
-      alertBox.style.display = 'block';
-      alertBox.className = 'alert ' + (data.success ? 'alert-success' : 'alert-error');
-      alertBox.innerText = data.message;
-
-      if (data.success) {
-        document.getElementById('newAdminUser').value = '';
-        document.getElementById('newAdminPass').value = '';
-      }
-    }
-
-    async function createPromo() {
-      const code = document.getElementById('newCode').value.trim();
-      const badge = document.getElementById('newBadge').value.trim();
-      const title = document.getElementById('newTitle').value.trim();
-      const expires = document.getElementById('newExpires').value;
-      const alertBox = document.getElementById('createAlert');
-
-      const res = await fetch('/api/promotions/create', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': authToken
-        },
-        body: JSON.stringify({ code, discount_text: badge, title, expires_at: expires })
-      });
-
-      const data = await res.json();
-      alertBox.style.display = 'block';
-      alertBox.className = 'alert ' + (data.success ? 'alert-success' : 'alert-error');
-      alertBox.innerText = data.message;
-
-      if (data.success) {
-        document.getElementById('newCode').value = '';
-        document.getElementById('newBadge').value = '';
-        document.getElementById('newTitle').value = '';
-        loadPromos();
-      }
-    }
-
-    async function loadPromos() {
-      const res = await fetch('/api/promotions/all');
-      const data = await res.json();
-      const container = document.getElementById('promoToggles');
-      container.innerHTML = '';
-
-      if (data.promotions && data.promotions.length > 0) {
-        data.promotions.forEach(p => {
-          const exp = new Date(p.expires_at).toLocaleDateString();
-          container.innerHTML += `
-            <div class="toggle-row">
-              <div>
-                <strong>${p.code}</strong> - ${p.title} (${p.discount_text})
-                <br><small style="color:#888;">Expires: ${exp}</small>
-              </div>
-              <div class="action-group">
-                <button class="toggle-btn ${p.is_active ? 'btn-on' : 'btn-off'}" onclick="togglePromo('${p.code}', ${!p.is_active})">
-                  ${p.is_active ? 'IN STOCK' : 'DISABLED'}
-                </button>
-                <button class="btn-delete" onclick="deletePromo('${p.code}')">✖</button>
-              </div>
-            </div>
-          `;
-        });
-      } else {
-        container.innerHTML = '<p style="color:#888;">No promotions created yet.</p>';
-      }
-    }
-
-    async function togglePromo(code, newState) {
-      await fetch('/api/promotions/toggle', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, is_active: newState })
-      });
-      loadPromos();
-    }
-
-    async function deletePromo(code) {
-      if (!confirm(`Are you sure you want to delete promotion "${code}"?`)) return;
-
-      const res = await fetch('/api/promotions/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code })
-      });
-
-      const data = await res.json();
-      if (data.success) loadPromos();
-      else alert(data.message || 'Error deleting promotion.');
-    }
-
-    async function redeemCoupon() {
-      const input = document.getElementById('couponInput');
-      const alertBox = document.getElementById('resultAlert');
-      const code = input.value.trim();
-
-      if (!code) return;
-
-      const res = await fetch('/api/redeem', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ couponCode: code })
-      });
-
-      const data = await res.json();
-      alertBox.style.display = 'block';
-      alertBox.className = 'alert ' + (data.success ? 'alert-success' : 'alert-error');
-      alertBox.innerText = data.message;
-      input.value = '';
-    }
-
-    updateAuthStateUI();
-    loadPromos();
-  </script>
-</body>
-</html>
+      color: #ff475
