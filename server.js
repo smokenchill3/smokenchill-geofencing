@@ -205,7 +205,7 @@ function createGoogleWalletUrl(promo) {
             contentDescription: { defaultValue: { language: 'en-US', value: 'Smoke N Chill Logo' } }
           },
           heroImage: {
-            sourceUri: { uri: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1032&q=80' },
+            sourceUri: { uri: 'https://smokenchill-geofencing.onrender.com/Snc3-Entrance.jpg' },
             contentDescription: { defaultValue: { language: 'en-US', value: 'Smoke N Chill Banner' } }
           },
           barcode: {
