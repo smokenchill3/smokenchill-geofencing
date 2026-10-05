@@ -23,21 +23,21 @@ const GEOFENCE_RADIUS_MILES = 0.25;
 // ==============================================
 // Service Account Loader (Supports Cloud ENV or Local File)
 // ==============================================
-let serviceAccount = null;
+let serviceAccount;
 
 if (process.env.SERVICE_ACCOUNT_JSON) {
-  try {
-    serviceAccount = JSON.parse(process.env.SERVICE_ACCOUNT_JSON);
-  } catch (err) {
-    console.error('[Error] Failed to parse SERVICE_ACCOUNT_JSON:', err.message);
-  }
+  // Cloud environment (Render)
+  serviceAccount = typeof process.env.SERVICE_ACCOUNT_JSON === 'string'
+    ? JSON.parse(process.env.SERVICE_ACCOUNT_JSON)
+    : process.env.SERVICE_ACCOUNT_JSON;
+} else if (fs.existsSync('./service-account.json')) {
+  // Local development environment
+  serviceAccount = JSON.parse(fs.readFileSync('./service-account.json', 'utf8'));
 } else {
-  try {
-    const rawKey = fs.readFileSync(path.join(__dirname, 'service-account.json'), 'utf8');
-    serviceAccount = JSON.parse(rawKey);
-  } catch (err) {
-    console.error('[Error] Could not load local service-account.json:', err.message);
-  }
+  return res.status(500).json({ 
+    success: false, 
+    error: "Google service account credentials not configured." 
+  });
 }
 
 // ==============================================
