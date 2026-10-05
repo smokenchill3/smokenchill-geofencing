@@ -6,6 +6,7 @@ const { Pool } = require('pg');
 const path = require('path');
 const fs = require('fs');
 const cors = require('cors');
+const bcrypt = require('bcryptjs');
 
 const PORT = process.env.PORT || 3000;
 
@@ -21,27 +22,40 @@ const STORE_LNG = -97.74632797629555;
 const GEOFENCE_RADIUS_MILES = 0.25;
 
 // ==============================================
-// Service Account Loader (Supports Cloud ENV or Local File)
+// Dynamic Service Account Loader
 // ==============================================
-let serviceAccount;
-
-if (process.env.SERVICE_ACCOUNT_JSON) {
-  // Cloud environment (Render)
-  serviceAccount = typeof process.env.SERVICE_ACCOUNT_JSON === 'string'
-    ? JSON.parse(process.env.SERVICE_ACCOUNT_JSON)
-    : process.env.SERVICE_ACCOUNT_JSON;
-} else if (fs.existsSync('./service-account.json')) {
-  // Local development environment
-  serviceAccount = JSON.parse(fs.readFileSync('./service-account.json', 'utf8'));
-} else {
-  return res.status(500).json({ 
-    success: false, 
-    error: "Google service account credentials not configured." 
-  });
+function getServiceAccount() {
+  if (process.env.SERVICE_ACCOUNT_JSON) {
+    try {
+      const sa = typeof process.env.SERVICE_ACCOUNT_JSON === 'string'
+        ? JSON.parse(process.env.SERVICE_ACCOUNT_JSON)
+        : process.env.SERVICE_ACCOUNT_JSON;
+      
+      if (sa && sa.private_key) {
+        sa.private_key = sa.private_key.replace(/\\n/g, '\n');
+      }
+      return sa;
+    } catch (err) {
+      console.error('[Service Account Error] Failed to parse SERVICE_ACCOUNT_JSON:', err.message);
+      return null;
+    }
+  } else if (fs.existsSync('./service-account.json')) {
+    try {
+      const sa = JSON.parse(fs.readFileSync('./service-account.json', 'utf8'));
+      if (sa && sa.private_key) {
+        sa.private_key = sa.private_key.replace(/\\n/g, '\n');
+      }
+      return sa;
+    } catch (err) {
+      console.error('[Service Account Error] Failed to read service-account.json:', err.message);
+      return null;
+    }
+  }
+  return null;
 }
 
 // ==============================================
-// PostgreSQL Connection
+// PostgreSQL Connection & Migrations
 // ==============================================
 const poolConfig = process.env.DATABASE_URL
   ? {
@@ -58,12 +72,9 @@ const poolConfig = process.env.DATABASE_URL
 
 const pool = new Pool(poolConfig);
 
-pool.connect()
-  .then(() => console.log('[PostgreSQL] Connected to geopromo_db successfully'))
-  .catch(err => console.error('[PostgreSQL] Connection error:', err.message));
-// Automatic schema migration on boot
 async function initDb() {
   try {
+    // 1. Create Promotions Table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS promotions (
           id SERIAL PRIMARY KEY,
@@ -75,12 +86,19 @@ async function initDb() {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
-      ALTER TABLE promotions ADD COLUMN IF NOT EXISTS code VARCHAR(50);
-      ALTER TABLE promotions ADD COLUMN IF NOT EXISTS title VARCHAR(100);
-      ALTER TABLE promotions ADD COLUMN IF NOT EXISTS discount_text VARCHAR(100);
-      ALTER TABLE promotions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP;
-      ALTER TABLE promotions ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
-      ALTER TABLE promotions ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+      CREATE TABLE IF NOT EXISTS users (
+          id SERIAL PRIMARY KEY,
+          username VARCHAR(50) UNIQUE NOT NULL,
+          password_hash VARCHAR(255) NOT NULL,
+          role VARCHAR(20) DEFAULT 'admin',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS redemptions (
+          id SERIAL PRIMARY KEY,
+          coupon_code VARCHAR(50) NOT NULL,
+          redeemed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
 
       INSERT INTO promotions (code, title, discount_text, expires_at, is_active)
       VALUES 
@@ -95,8 +113,27 @@ async function initDb() {
         is_active = EXCLUDED.is_active;
     `);
     console.log('[PostgreSQL] Database schema verified and migrated successfully.');
+
+    // 2. Seed Admin User after tables are guaranteed to exist
+    await seedDefaultAdmin();
   } catch (err) {
     console.error('[PostgreSQL Migration Error]:', err.message);
+  }
+}
+
+async function seedDefaultAdmin() {
+  try {
+    const res = await pool.query('SELECT COUNT(*) FROM users');
+    if (parseInt(res.rows[0].count) === 0) {
+      const defaultHash = await bcrypt.hash('admin123', 10);
+      await pool.query(
+        'INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)',
+        ['admin', defaultHash, 'admin']
+      );
+      console.log('✅ Default admin account created (Username: admin | Password: admin123)');
+    }
+  } catch (err) {
+    console.error('[Admin Seeding Error]:', err.message);
   }
 }
 
@@ -117,6 +154,7 @@ const io = new Server(server, { cors: { origin: '*' } });
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // ==============================================
 // Helper Functions
@@ -135,8 +173,10 @@ function getDistanceInMiles(lat1, lon1, lat2, lon2) {
 }
 
 function createGoogleWalletUrl(promo) {
+  const serviceAccount = getServiceAccount();
+
   if (!serviceAccount) {
-    throw new Error('service-account.json is missing on server.');
+    throw new Error('Google service-account.json credentials are missing or invalid on server.');
   }
 
   const objectId = `${ISSUER_ID}.${promo.code.replace(/[^a-zA-Z0-9_.-]/g, '_')}_${Date.now()}`;
@@ -193,8 +233,9 @@ function createGoogleWalletUrl(promo) {
 // Routes & Web Page Endpoints
 // ==============================================
 
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
-app.get('/cashier.html', (req, res) => res.sendFile(path.join(__dirname, 'cashier.html')));
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.get('/cashier.html', (req, res) => res.sendFile(path.join(__dirname, 'public', 'cashier.html')));
+app.get('/admin.html', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 
 // Fetch active unexpired promotions
 app.get('/api/promotions', async (req, res) => {
@@ -223,17 +264,14 @@ app.post('/api/promotions/toggle', async (req, res) => {
   const { code, is_active } = req.body;
   try {
     await pool.query(`UPDATE promotions SET is_active = $1 WHERE code = $2`, [is_active, code]);
-    
-    // Broadcast state change to all connected customer clients in real time
     io.emit('promoStateUpdated', { code, is_active });
-
     res.json({ success: true, message: `Promo ${code} updated successfully.` });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// Add or Update a Promotion from the Cashier Web Terminal
+// Create or Update a Promotion
 app.post('/api/promotions/create', async (req, res) => {
   const { code, title, discount_text, expires_at } = req.body;
 
@@ -259,7 +297,6 @@ app.post('/api/promotions/create', async (req, res) => {
       [formattedCode, title.trim(), discount_text.trim(), expires_at]
     );
 
-    // Notify all customer devices in real-time that a new offer is available
     io.emit('promoStateUpdated');
 
     return res.json({ 
@@ -282,8 +319,6 @@ app.post('/api/promotions/delete', async (req, res) => {
 
   try {
     await pool.query('DELETE FROM promotions WHERE code = $1', [code]);
-
-    // Instantly notify all customer phones and cashier screens to remove the offer
     io.emit('promoStateUpdated');
 
     return res.json({
@@ -296,7 +331,7 @@ app.post('/api/promotions/delete', async (req, res) => {
   }
 });
 
-// Generate Wallet Pass link for a specific code
+// Generate Google Wallet Pass link
 app.get('/api/wallet/google/:code', async (req, res) => {
   const code = req.params.code;
   try {
@@ -326,7 +361,6 @@ app.post('/api/redeem', async (req, res) => {
   }
 
   try {
-    // 1. Check if promo exists and is active
     const promoCheck = await pool.query(
       `SELECT * FROM promotions WHERE code = $1 AND is_active = true AND expires_at > NOW()`,
       [couponCode]
@@ -336,7 +370,6 @@ app.post('/api/redeem', async (req, res) => {
       return res.json({ success: false, message: 'INVALID OR EXPIRED PROMO CODE' });
     }
 
-    // 2. Check duplicate redemptions
     const checkResult = await pool.query(
       'SELECT * FROM redemptions WHERE coupon_code = $1',
       [couponCode]
@@ -350,7 +383,6 @@ app.post('/api/redeem', async (req, res) => {
       });
     }
 
-    // 3. Insert redemption record
     await pool.query('INSERT INTO redemptions (coupon_code) VALUES ($1)', [couponCode]);
 
     return res.json({
@@ -363,27 +395,7 @@ app.post('/api/redeem', async (req, res) => {
   }
 });
 
-const bcrypt = require('bcryptjs');
-
-// Auto-seed default Superadmin on startup if table is empty
-async function seedDefaultAdmin() {
-  try {
-    const res = await pool.query('SELECT COUNT(*) FROM users');
-    if (parseInt(res.rows[0].count) === 0) {
-      const defaultHash = await bcrypt.hash('admin123', 10);
-      await pool.query(
-        'INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)',
-        ['admin', defaultHash, 'admin']
-      );
-      console.log('✅ Default admin account created (Username: admin | Password: admin123)');
-    }
-  } catch (err) {
-    console.error('Error seeding admin user:', err.message);
-  }
-}
-seedDefaultAdmin();
-
-// 1. Admin Login Endpoint
+// Admin Authentication Endpoints
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
 
@@ -408,7 +420,7 @@ app.post('/api/auth/login', async (req, res) => {
       success: true,
       username: user.username,
       role: user.role,
-      token: `auth_${user.id}_${Date.now()}` // Simplified auth token
+      token: `auth_${user.id}_${Date.now()}`
     });
   } catch (err) {
     console.error('[Login Error]:', err.message);
@@ -416,7 +428,6 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// 2. Add New Admin/User Endpoint (Requires existing Admin Auth Header)
 app.post('/api/admin/add-user', async (req, res) => {
   const { newUsername, newPassword } = req.body;
   const authHeader = req.headers.authorization;
@@ -438,7 +449,7 @@ app.post('/api/admin/add-user', async (req, res) => {
 
     return res.json({ success: true, message: `User "${newUsername}" created successfully!` });
   } catch (err) {
-    if (err.code === '23505') { // Postgres unique violation code
+    if (err.code === '23505') {
       return res.status(400).json({ success: false, message: 'Username already exists.' });
     }
     console.error('[Add User Error]:', err.message);
@@ -446,48 +457,6 @@ app.post('/api/admin/add-user', async (req, res) => {
   }
 });
 
-// 3. Updated Protected Create Promo Endpoint
-app.post('/api/promotions/create', async (req, res) => {
-  const { code, title, discount_text, expires_at } = req.body;
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader) {
-    return res.status(403).json({ success: false, message: 'Admin login required to publish promos.' });
-  }
-
-  if (!code || !title || !discount_text || !expires_at) {
-    return res.status(400).json({ 
-      success: false, 
-      message: 'All fields (Code, Title, Discount Text, Expiration) are required.' 
-    });
-  }
-
-  try {
-    const formattedCode = code.trim().toUpperCase().replace(/\s+/g, '');
-
-    await pool.query(
-      `INSERT INTO promotions (code, title, discount_text, expires_at, is_active)
-       VALUES ($1, $2, $3, $4, true)
-       ON CONFLICT (code) DO UPDATE 
-       SET 
-         title = EXCLUDED.title,
-         discount_text = EXCLUDED.discount_text,
-         expires_at = EXCLUDED.expires_at,
-         is_active = true`,
-      [formattedCode, title.trim(), discount_text.trim(), expires_at]
-    );
-
-    io.emit('promoStateUpdated');
-
-    return res.json({ 
-      success: true, 
-      message: `Promotion "${formattedCode}" created & activated successfully!` 
-    });
-  } catch (err) {
-    console.error('[Add Promo Error]:', err.message);
-    return res.status(500).json({ success: false, message: 'Database error creating promotion.' });
-  }
-});
 // ==============================================
 // Socket.io Real-Time Handler
 // ==============================================
