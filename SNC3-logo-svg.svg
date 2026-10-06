@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 660 660" width="660" height="660">
+  <defs>
+    <!-- Dark Background Gradient -->
+    <radialGradient id="bgGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#2a0818" />
+      <stop offset="100%" stop-color="#0b0b0f" />
+    </radialGradient>
+
+    <!-- Neon Glow Filter -->
+    <filter id="neonGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="blur1" />
+      <feGaussianBlur stdDeviation="15" result="blur2" />
+      <feGaussianBlur stdDeviation="30" result="blur3" />
+      <feMerge>
+        <feMergeNode in="blur3" />
+        <feMergeNode in="blur2" />
+        <feMergeNode in="blur1" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background Circle -->
+  <circle cx="330" cy="330" r="310" fill="url(#bgGlow)" stroke="#ff2a6d" stroke-width="4" opacity="0.8" />
+
+  <!-- Outer Neon Glow Layer -->
+  <g filter="url(#neonGlow)">
+    <text x="330" y="310" 
+          text-anchor="middle" 
+          font-family="'Impact', 'Arial Black', sans-serif" 
+          font-size="62" 
+          font-weight="900" 
+          fill="#ff2a6d" 
+          letter-spacing="2">SMOKE-N-CHILL</text>
+          
+    <text x="330" y="380" 
+          text-anchor="middle" 
+          font-family="'Arial', sans-serif" 
+          font-size="28" 
+          font-weight="700" 
+          fill="#00f0ff" 
+          letter-spacing="6">RESEARCH</text>
+  </g>
+
+  <!-- Bright Core Text Layer -->
+  <text x="330" y="310" 
+        text-anchor="middle" 
+        font-family="'Impact', 'Arial Black', sans-serif" 
+        font-size="62" 
+        font-weight="900" 
+        fill="#ffffff" 
+        letter-spacing="2">SMOKE-N-CHILL</text>
+
+  <text x="330" y="380" 
+        text-anchor="middle" 
+        font-family="'Arial', sans-serif" 
+        font-size="28" 
+        font-weight="700" 
+        fill="#ffffff" 
+        letter-spacing="6">RESEARCH</text>
+</svg>

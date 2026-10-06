@@ -195,6 +195,27 @@
       }
     }
 
+function disableQRCodeUI(unlocksAt) {
+  const qrElement = document.getElementById('qrCodeContainer');
+  if (qrElement) {
+    qrElement.style.opacity = "0.2";
+    qrElement.style.pointerEvents = "none";
+
+    const unlockDate = unlocksAt ? new Date(unlocksAt) : null;
+    const timeStr = unlockDate ? unlockDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '24 hours';
+
+    // Remove any previous overlay message before appending
+    const existingNotice = document.getElementById('redeemedNotice');
+    if (existingNotice) existingNotice.remove();
+
+    qrElement.insertAdjacentHTML('afterend', `
+      <div id="redeemedNotice" style="background:#ff4757; color:#fff; padding:12px; font-weight:bold; border-radius:8px; text-align:center; margin-top:10px;">
+        🔒 REDEEMED TODAY<br>
+        <span style="font-size:0.85rem; font-weight:normal;">Unlocks again tomorrow at ${timeStr}</span>
+      </div>
+    `);
+  }
+}
     socket.on('locationResult', (data) => {
       const badge = document.getElementById('statusBadge');
       const container = document.getElementById('promosContainer');
