@@ -16,10 +16,27 @@ const PORT = process.env.PORT || 3000;
 const ISSUER_ID = '3388000000023201282';
 const CLASS_ID = `${ISSUER_ID}.smoke_n_chill_promo`;
 
-// Smoke N Chill Store Location (Geofence: 0.25 miles)
-const STORE_LAT = 30.406395250881655;
-const STORE_LNG = -97.74632797629555;
-const GEOFENCE_RADIUS_MILES = 0.25;
+// ==============================================
+// Multi-Store Geofence Locations (15-Mile Radius Each)
+// ==============================================
+const STORES = [
+  {
+    id: "research",
+    name: "Smoke N Chill - Research Blvd",
+    address: "11150 Research Blvd, Austin, TX",
+    lat: 30.4182,
+    lng: -97.7473,
+    radiusMiles: 15
+  },
+  {
+    id: "parmer",
+    name: "Smoke N Chill - E Parmer Ln",
+    address: "1606 E Parmer Ln, Austin, TX",
+    lat: 30.3985,
+    lng: -97.6521,
+    radiusMiles: 15
+  }
+];
 
 // ==============================================
 // Dynamic Service Account Loader
@@ -158,8 +175,9 @@ app.use(express.static(__dirname));
 // Helper Functions
 // ==============================================
 
-function getDistanceInMiles(lat1, lon1, lat2, lon2) {
-  const R = 3958.8;
+// Haversine formula: Calculates distance in miles between two coordinate sets
+function getDistanceFromLatLonInMiles(lat1, lon1, lat2, lon2) {
+  const R = 3958.8; // Earth's radius in miles
   const dLat = (lat2 - lat1) * (Math.PI / 180);
   const dLon = (lon2 - lon1) * (Math.PI / 180);
   const a =
@@ -192,7 +210,7 @@ function createGoogleWalletUrl(promo) {
           state: 'ACTIVE',
           hexBackgroundColor: '#0f0f15',
           cardTitle: {
-            defaultValue: { language: 'en-US', value: 'Smoke N Chill @Research' }
+            defaultValue: { language: 'en-US', value: 'Smoke N Chill' }
           },
           header: {
             defaultValue: { language: 'en-US', value: promo.discount_text }
@@ -241,6 +259,39 @@ app.get('/admin.html', (req, res) => {
   return res.status(404).send('Admin page not found.');
 });
 
+// API Route to verify if user is within 15 miles of ANY store location
+app.post('/api/verify-location', (req, res) => {
+  const { userLat, userLng } = req.body;
+
+  if (!userLat || !userLng) {
+    return res.status(400).json({ allowed: false, message: "Location coordinates missing." });
+  }
+
+  let nearestStore = null;
+  let minDistance = Infinity;
+  let isWithinFence = false;
+
+  for (const store of STORES) {
+    const distance = getDistanceFromLatLonInMiles(userLat, userLng, store.lat, store.lng);
+    if (distance < minDistance) {
+      minDistance = distance;
+      nearestStore = store;
+    }
+    if (distance <= store.radiusMiles) {
+      isWithinFence = true;
+    }
+  }
+
+  res.json({
+    allowed: isWithinFence,
+    storeName: nearestStore ? nearestStore.name : "Smoke N Chill",
+    distanceMiles: parseFloat(minDistance.toFixed(2)),
+    message: isWithinFence
+      ? `Unlocked! Nearest store: ${nearestStore.name} (${minDistance.toFixed(1)} miles away).`
+      : `You are ${minDistance.toFixed(1)} miles away. Offers require being within 15 miles of a store.`
+  });
+});
+
 // Fetch active unexpired promotions
 app.get('/api/promotions', async (req, res) => {
   try {
@@ -273,35 +324,6 @@ app.post('/api/promotions/toggle', async (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
-});
-
-// In-memory or database tracking for redeemed coupons
-const redeemedCoupons = new Set();
-
-// Cashier Verification Endpoint
-app.post('/api/cashier/redeem', (req, res) => {
-  const { code } = req.body;
-
-  if (!code) {
-    return res.status(400).json({ status: 'error', message: 'No code provided.' });
-  }
-
-  if (redeemedCoupons.has(code.toUpperCase())) {
-    return res.json({ 
-      valid: false, 
-      status: 'ALREADY_USED', 
-      message: '❌ Coupon has already been redeemed!' 
-    });
-  }
-
-  // Mark as redeemed
-  redeemedCoupons.add(code.toUpperCase());
-
-  return res.json({ 
-    valid: true, 
-    status: 'SUCCESS', 
-    message: `✅ Valid Coupon! Apply $5 OFF to ticket.` 
-  });
 });
 
 // Create or Update a Promotion
@@ -385,46 +407,79 @@ app.get('/api/wallet/google/:code', async (req, res) => {
   }
 });
 
-// Cashier Coupon Redemption Endpoint
+// Cashier Coupon Redemption Endpoint (with 24-hour Cooldown)
 app.post('/api/redeem', async (req, res) => {
   const { couponCode } = req.body;
-
-  if (!couponCode) {
-    return res.status(400).json({ success: false, message: 'Coupon code is required.' });
-  }
+  if (!couponCode) return res.status(400).json({ success: false, message: 'Coupon code required' });
 
   try {
-    const promoCheck = await pool.query(
-      `SELECT * FROM promotions WHERE code = $1 AND is_active = true AND expires_at > NOW()`,
-      [couponCode]
-    );
-
-    if (promoCheck.rows.length === 0) {
-      return res.json({ success: false, message: 'INVALID OR EXPIRED PROMO CODE' });
+    // 1. Check if coupon is active in store inventory
+    const promo = await pool.query('SELECT * FROM promotions WHERE code = $1 AND is_active = true', [couponCode]);
+    if (promo.rows.length === 0) {
+      return res.json({ success: false, message: '❌ Invalid or Disabled Coupon' });
     }
 
-    const checkResult = await pool.query(
-      'SELECT * FROM redemptions WHERE coupon_code = $1',
+    // 2. Check if redeemed within the last 24 hours
+    const cooldownCheck = await pool.query(
+      `SELECT redeemed_at FROM redemptions 
+       WHERE coupon_code = $1 AND redeemed_at > NOW() - INTERVAL '24 hours' 
+       ORDER BY redeemed_at DESC LIMIT 1`,
       [couponCode]
     );
 
-    if (checkResult.rows.length > 0) {
-      const redeemedTime = new Date(checkResult.rows[0].redeemed_at).toLocaleString();
+    if (cooldownCheck.rows.length > 0) {
+      const lastRedeemed = new Date(cooldownCheck.rows[0].redeemed_at);
+      const nextAvailable = new Date(lastRedeemed.getTime() + 24 * 60 * 60 * 1000);
+      const timeString = nextAvailable.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
       return res.json({
         success: false,
-        message: `ALREADY REDEEMED on ${redeemedTime}`
+        message: `❌ ALREADY REDEEMED TODAY (Available again tomorrow at ${timeString})`
       });
     }
 
-    await pool.query('INSERT INTO redemptions (coupon_code) VALUES ($1)', [couponCode]);
+    // 3. Record new redemption timestamp
+    await pool.query('INSERT INTO redemptions (coupon_code, redeemed_at) VALUES ($1, NOW())', [couponCode]);
 
     return res.json({
       success: true,
-      message: `SUCCESS! ${promoCheck.rows[0].title} (${promoCheck.rows[0].discount_text}) APPLIED`
+      message: `✅ COUPON REDEEMED SUCCESSFULLY! (Locked for 24 hours)`
     });
+
   } catch (err) {
-    console.error('[Redemption Error]:', err.message);
-    return res.status(500).json({ success: false, message: 'Database error processing redemption.' });
+    console.error('Redemption error:', err);
+    res.status(500).json({ success: false, message: 'Server error during redemption.' });
+  }
+});
+
+// Coupon Status Check Endpoint (for Customer Phone Polling - 24hr check)
+app.get('/api/coupon-status', async (req, res) => {
+  try {
+    const { code } = req.query;
+    if (!code) return res.json({ redeemed: false });
+
+    // Check for redemption in the last 24 hours
+    const result = await pool.query(
+      `SELECT redeemed_at FROM redemptions 
+       WHERE coupon_code = $1 AND redeemed_at > NOW() - INTERVAL '24 hours' 
+       ORDER BY redeemed_at DESC LIMIT 1`,
+      [code]
+    );
+
+    if (result.rows.length > 0) {
+      const lastRedeemed = new Date(result.rows[0].redeemed_at);
+      const unlockTime = new Date(lastRedeemed.getTime() + 24 * 60 * 60 * 1000);
+
+      return res.json({ 
+        redeemed: true, 
+        redeemed_at: result.rows[0].redeemed_at,
+        unlocks_at: unlockTime
+      });
+    }
+
+    res.json({ redeemed: false });
+  } catch (err) {
+    res.status(500).json({ redeemed: false, error: err.message });
   }
 });
 
@@ -491,7 +546,7 @@ app.post('/api/admin/add-user', async (req, res) => {
 });
 
 // ==============================================
-// Socket.io Real-Time Handler
+// Socket.io Real-Time Handler (Multi-Store Support)
 // ==============================================
 io.on('connection', (socket) => {
   socket.on('checkLocation', async (data) => {
@@ -501,8 +556,20 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const distance = getDistanceInMiles(latitude, longitude, STORE_LAT, STORE_LNG);
-    const isInside = distance <= GEOFENCE_RADIUS_MILES;
+    let nearestStore = null;
+    let minDistance = Infinity;
+    let isInside = false;
+
+    for (const store of STORES) {
+      const distance = getDistanceFromLatLonInMiles(latitude, longitude, store.lat, store.lng);
+      if (distance < minDistance) {
+        minDistance = distance;
+        nearestStore = store;
+      }
+      if (distance <= store.radiusMiles) {
+        isInside = true;
+      }
+    }
 
     let availablePromos = [];
     if (isInside) {
@@ -514,7 +581,8 @@ io.on('connection', (socket) => {
 
     socket.emit('locationResult', {
       inside: isInside,
-      distanceMiles: distance.toFixed(2),
+      storeName: nearestStore ? nearestStore.name : "Smoke N Chill",
+      distanceMiles: parseFloat(minDistance.toFixed(2)),
       promotions: availablePromos
     });
   });
@@ -525,7 +593,7 @@ io.on('connection', (socket) => {
 // ==============================================
 server.listen(PORT, () => {
   console.log('==============================================');
-  console.log(' Smoke N Chill @ Research - Multi-Promo Engine Running');
+  console.log(' Smoke N Chill - Multi-Store Promo Engine Running');
   console.log(` Local: http://127.0.0.1:${PORT}`);
   console.log('==============================================');
 });
