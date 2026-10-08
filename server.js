@@ -1,97 +1,46 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
 const path = require('path');
-const fs = require('fs');
-const cors = require('cors');
-const bcrypt = require('bcryptjs');
 
-const PORT = process.env.PORT || 3000;
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
 
-// ==============================================
-// Google Wallet Credentials & Configuration
-// ==============================================
-const ISSUER_ID = '3388000000023201282';
-const CLASS_ID = `${ISSUER_ID}.smoke_n_chill_promo`;
+const JWT_SECRET = process.env.JWT_SECRET || 'smokenchill_secret_key_2026';
 
-// ==============================================
-// Multi-Store Geofence Locations (15-Mile Radius Each)
-// ==============================================
-const STORES = [
-  {
-    id: "research",
-    name: "Smoke N Chill - Research Blvd",
-    address: "11150 Research Blvd, Austin, TX",
-    lat: 30.4182,
-    lng: -97.7473,
-    radiusMiles: 15
-  },
-  {
-    id: "parmer",
-    name: "Smoke N Chill - E Parmer Ln",
-    address: "1606 E Parmer Ln, Austin, TX",
-    lat: 30.3985,
-    lng: -97.6521,
-    radiusMiles: 15
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+});
+
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Middleware: Admin Token Verification
+function verifyAdminToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    return res.status(401).json({ success: false, message: 'Admin authentication required.' });
   }
-];
 
-// ==============================================
-// Dynamic Service Account Loader
-// ==============================================
-function getServiceAccount() {
-  if (process.env.SERVICE_ACCOUNT_JSON) {
-    try {
-      const sa = typeof process.env.SERVICE_ACCOUNT_JSON === 'string'
-        ? JSON.parse(process.env.SERVICE_ACCOUNT_JSON)
-        : process.env.SERVICE_ACCOUNT_JSON;
-      
-      if (sa && sa.private_key) {
-        sa.private_key = sa.private_key.replace(/\\n/g, '\n');
-      }
-      return sa;
-    } catch (err) {
-      console.error('[Service Account Error] Failed to parse SERVICE_ACCOUNT_JSON:', err.message);
-      return null;
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+
+  jwt.verify(token, JWT_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ success: false, message: 'Invalid or expired token.' });
     }
-  } else if (fs.existsSync('./service-account.json')) {
-    try {
-      const sa = JSON.parse(fs.readFileSync('./service-account.json', 'utf8'));
-      if (sa && sa.private_key) {
-        sa.private_key = sa.private_key.replace(/\\n/g, '\n');
-      }
-      return sa;
-    } catch (err) {
-      console.error('[Service Account Error] Failed to read service-account.json:', err.message);
-      return null;
-    }
-  }
-  return null;
+    req.user = decoded;
+    next();
+  });
 }
 
-// ==============================================
-// PostgreSQL Connection & Migrations
-// ==============================================
-const poolConfig = process.env.DATABASE_URL
-  ? {
-      connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false }
-    }
-  : {
-      user: process.env.PGUSER || 'postgres',
-      host: process.env.PGHOST || 'localhost',
-      database: process.env.PGDATABASE || 'geopromo_db',
-      password: process.env.PGPASSWORD || 'admin',
-      port: process.env.PGPORT || 5432,
-    };
-
-const pool = new Pool(poolConfig);
-
+// Initialize Database Tables & Seed Defaults
 async function initDb() {
   try {
-    // 1. Create tables and run schema updates
     await pool.query(`
       CREATE TABLE IF NOT EXISTS promotions (
           id SERIAL PRIMARY KEY,
@@ -103,8 +52,6 @@ async function initDb() {
           is_active BOOLEAN DEFAULT TRUE,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-
-      ALTER TABLE promotions ADD COLUMN IF NOT EXISTS starts_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 
       CREATE TABLE IF NOT EXISTS users (
           id SERIAL PRIMARY KEY,
@@ -119,9 +66,18 @@ async function initDb() {
           coupon_code VARCHAR(50) NOT NULL,
           redeemed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+
+      CREATE TABLE IF NOT EXISTS announcements (
+          id SERIAL PRIMARY KEY,
+          title VARCHAR(150) NOT NULL,
+          message TEXT NOT NULL,
+          type VARCHAR(20) DEFAULT 'info',
+          is_active BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
     `);
 
-    // 2. Only seed initial promos if the table has ZERO rows
+    // Only seed initial promos if table is empty (prevents deleted promos from reappearing on restart)
     const promoCount = await pool.query('SELECT COUNT(*) FROM promotions');
     if (parseInt(promoCount.rows[0].count) === 0) {
       await pool.query(`
@@ -131,525 +87,137 @@ async function initDb() {
           ('CHILL20', '20% Off Vape Accessories', '20% OFF', NOW(), '2026-12-31 23:59:59', true),
           ('SMOKE10', '10% Off Storewide Purchase', '10% OFF', NOW(), '2026-12-31 23:59:59', true);
       `);
-      console.log('[PostgreSQL] Initial default promotions seeded.');
+      console.log('[PostgreSQL] Default promotions seeded.');
+    }
+
+    // Seed default admin user if none exists
+    const userCount = await pool.query('SELECT COUNT(*) FROM users');
+    if (parseInt(userCount.rows[0].count) === 0) {
+      const hashedPw = await bcrypt.hash('admin123', 10);
+      await pool.query(
+        'INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)',
+        ['admin', hashedPw, 'admin']
+      );
+      console.log('[PostgreSQL] Default admin user created (admin / admin123).');
     }
 
     console.log('[PostgreSQL] Database schema verified successfully.');
-    await seedDefaultAdmin();
   } catch (err) {
-    console.error('[PostgreSQL Migration Error]:', err.message);
-  }
-}
-async function seedDefaultAdmin() {
-  try {
-    const res = await pool.query('SELECT COUNT(*) FROM users');
-    if (parseInt(res.rows[0].count) === 0) {
-      const defaultHash = await bcrypt.hash('admin123', 10);
-      await pool.query(
-        'INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)',
-        ['admin', defaultHash, 'admin']
-      );
-      console.log('✅ Default admin account created (Username: admin | Password: admin123)');
-    }
-  } catch (err) {
-    console.error('[Admin Seeding Error]:', err.message);
+    console.error('[PostgreSQL Init Error]:', err.message);
   }
 }
 
-pool.connect()
-  .then(() => {
-    console.log('[PostgreSQL] Connected to geopromo_db successfully');
-    initDb();
-  })
-  .catch(err => console.error('[PostgreSQL] Connection error:', err.message));
-
-// ==============================================
-// Express & Socket.io Setup
-// ==============================================
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' } });
-
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(express.static(__dirname));
-
-// ==============================================
-// Authentication Middleware
-// ==============================================
-function verifyAdminToken(req, res, next) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) {
-    return res.status(401).json({ success: false, message: 'Admin authentication required.' });
-  }
-
-  const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : authHeader;
-
-  if (!token || !token.startsWith('auth_')) {
-    return res.status(403).json({ success: false, message: 'Invalid or expired session token.' });
-  }
-
-  next();
-}
-
-// ==============================================
-// Helper Functions
-// ==============================================
-
-// Haversine formula: Calculates distance in miles between two coordinate sets
-function getDistanceFromLatLonInMiles(lat1, lon1, lat2, lon2) {
-  const R = 3958.8; // Earth's radius in miles
-  const dLat = (lat2 - lat1) * (Math.PI / 180);
-  const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-function createGoogleWalletUrl(promo) {
-  const serviceAccount = getServiceAccount();
-
-  if (!serviceAccount) {
-    throw new Error('Google service-account.json credentials are missing or invalid on server.');
-  }
-
-  const objectId = `${ISSUER_ID}.${promo.code.replace(/[^a-zA-Z0-9_.-]/g, '_')}_${Date.now()}`;
-
-  const claims = {
-    iss: serviceAccount.client_email,
-    aud: 'google',
-    origins: ['*'],
-    typ: 'savetowallet',
-    payload: {
-      genericObjects: [
-        {
-          id: objectId,
-          classId: CLASS_ID,
-          state: 'ACTIVE',
-          hexBackgroundColor: '#0f0f15',
-          cardTitle: {
-            defaultValue: { language: 'en-US', value: 'Smoke N Chill' }
-          },
-          header: {
-            defaultValue: { language: 'en-US', value: promo.discount_text }
-          },
-          subheader: {
-            defaultValue: { language: 'en-US', value: promo.title }
-          },
-          logo: {
-            sourceUri: { uri: 'https://smokenchill-geofencing.onrender.com/Snc3-logo.png' },
-            contentDescription: { defaultValue: { language: 'en-US', value: 'Smoke N Chill Logo' } }
-          },
-          heroImage: {
-            sourceUri: { uri: 'https://smokenchill-geofencing.onrender.com/Snc3-Entrance.jpg' },
-            contentDescription: { defaultValue: { language: 'en-US', value: 'Smoke N Chill Banner' } }
-          },
-          barcode: {
-            type: 'QR_CODE',
-            value: promo.code,
-            alternateText: promo.code
-          },
-          textModulesData: [
-            { header: 'COUPON CODE', body: promo.code, id: 'code_module' },
-            { header: 'EXPIRES', body: new Date(promo.expires_at).toLocaleDateString(), id: 'exp_module' },
-            { header: 'INSTRUCTIONS', body: 'Show this QR code to the cashier (Must be 21+)', id: 'instructions_module' }
-          ]
-        }
-      ]
-    }
-  };
-
-  const token = jwt.sign(claims, serviceAccount.private_key, { algorithm: 'RS256' });
-  return `https://pay.google.com/gp/v/save/${token}`;
-}
-
-// ==============================================
-// Routes & Web Page Endpoints
-// ==============================================
-
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
-app.get('/cashier.html', (req, res) => res.sendFile(path.join(__dirname, 'cashier.html')));
-app.get('/admin.html', (req, res) => {
-  const adminPath = path.join(__dirname, 'admin.html');
-  if (fs.existsSync(adminPath)) {
-    return res.sendFile(adminPath);
-  }
-  return res.status(404).send('Admin page not found.');
-});
-
-// API Route to verify if user is within 15 miles of ANY store location
-app.post('/api/verify-location', (req, res) => {
-  const { userLat, userLng } = req.body;
-
-  if (!userLat || !userLng) {
-    return res.status(400).json({ allowed: false, message: "Location coordinates missing." });
-  }
-
-  let nearestStore = null;
-  let minDistance = Infinity;
-  let isWithinFence = false;
-
-  for (const store of STORES) {
-    const distance = getDistanceFromLatLonInMiles(userLat, userLng, store.lat, store.lng);
-    if (distance < minDistance) {
-      minDistance = distance;
-      nearestStore = store;
-    }
-    if (distance <= store.radiusMiles) {
-      isWithinFence = true;
-    }
-  }
-
-  res.json({
-    allowed: isWithinFence,
-    storeName: nearestStore ? nearestStore.name : "Smoke N Chill",
-    distanceMiles: parseFloat(minDistance.toFixed(2)),
-    message: isWithinFence
-      ? `Unlocked! Nearest store: ${nearestStore.name} (${minDistance.toFixed(1)} miles away).`
-      : `You are ${minDistance.toFixed(1)} miles away. Offers require being within 15 miles of a store.`
-  });
-});
-
-// Fetch active, live, unexpired promotions
-app.get('/api/promotions', async (req, res) => {
-  try {
-    const result = await pool.query(
-      `SELECT * FROM promotions 
-       WHERE is_active = true 
-         AND starts_at <= NOW() 
-         AND expires_at > NOW() 
-       ORDER BY id ASC`
-    );
-    res.json({ success: true, promotions: result.rows });
-  } catch (err) {
-    console.error('Error fetching active promotions:', err);
-    res.status(500).json({ success: false, message: 'Database query error.' });
-  }
-});
-
-// Fetch upcoming scheduled promotions
-app.get('/api/promotions/upcoming', async (req, res) => {
-  try {
-    const result = await pool.query(
-      `SELECT * FROM promotions 
-       WHERE starts_at > NOW() 
-         AND expires_at > NOW()
-       ORDER BY starts_at ASC`
-    );
-    res.json({ success: true, upcomingPromotions: result.rows });
-  } catch (err) {
-    console.error('Error fetching upcoming promotions:', err);
-    res.status(500).json({ success: false, message: 'Database query error.' });
-  }
-});
-
-// Fetch all promotions for admin management view
-app.get('/api/promotions/all', async (req, res) => {
-  try {
-    const result = await pool.query(
-      `SELECT *, 
-        CASE 
-          WHEN starts_at > NOW() THEN 'UPCOMING'
-          WHEN expires_at <= NOW() THEN 'EXPIRED'
-          WHEN is_active = false THEN 'DISABLED'
-          ELSE 'ACTIVE'
-        END AS status
-       FROM promotions 
-       ORDER BY created_at DESC`
-    );
-    res.json({ success: true, promotions: result.rows });
-  } catch (err) {
-    console.error('Error fetching all promotions:', err);
-    res.status(500).json({ success: false, message: 'Database query error.' });
-  }
-});
-
-// Toggle promotion active/disabled status
-app.post('/api/promotions/toggle', async (req, res) => {
-  const { code, is_active } = req.body;
-  try {
-    await pool.query(`UPDATE promotions SET is_active = $1 WHERE code = $2`, [is_active, code]);
-    io.emit('promoStateUpdated', { code, is_active });
-    res.json({ success: true, message: `Promo ${code} updated successfully.` });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
-
-// Create or Update a Promotion (Protected)
-app.post('/api/promotions/create', verifyAdminToken, async (req, res) => {
-  const { code, title, discount_text, starts_at, expires_at } = req.body;
-
-  if (!code || !title || !discount_text || !expires_at) {
-    return res.status(400).json({ 
-      success: false, 
-      message: 'Code, title, discount text, and expiration date are required.' 
-    });
-  }
-
-  const formattedCode = code.trim().toUpperCase().replace(/\s+/g, '');
-  const startTime = starts_at ? new Date(starts_at).toISOString() : new Date().toISOString();
-  const expireTime = new Date(expires_at).toISOString();
-
-  try {
-    await pool.query(
-      `INSERT INTO promotions (code, title, discount_text, starts_at, expires_at, is_active)
-       VALUES ($1, $2, $3, $4, $5, true)
-       ON CONFLICT (code) DO UPDATE 
-       SET 
-         title = EXCLUDED.title,
-         discount_text = EXCLUDED.discount_text,
-         starts_at = EXCLUDED.starts_at,
-         expires_at = EXCLUDED.expires_at,
-         is_active = true`,
-      [formattedCode, title.trim(), discount_text.trim(), startTime, expireTime]
-    );
-
-    io.emit('promoStateUpdated');
-
-    return res.json({ 
-      success: true, 
-      message: `Promotion "${formattedCode}" saved & activated successfully!` 
-    });
-  } catch (err) {
-    console.error('[Add Promo Error]:', err.message);
-    return res.status(500).json({ success: false, message: 'Database error creating promotion.' });
-  }
-});
-
-// Delete a Promotion (Protected)
-app.post('/api/promotions/delete', verifyAdminToken, async (req, res) => {
-  const { code } = req.body;
-
-  if (!code) {
-    return res.status(400).json({ success: false, message: 'Promo code is required.' });
-  }
-
-  try {
-    await pool.query('DELETE FROM promotions WHERE code = $1', [code]);
-    io.emit('promoStateUpdated');
-
-    return res.json({
-      success: true,
-      message: `Promotion "${code}" deleted successfully.`
-    });
-  } catch (err) {
-    console.error('[Delete Promo Error]:', err.message);
-    return res.status(500).json({ success: false, message: 'Database error deleting promotion.' });
-  }
-});
-
-// Generate Google Wallet Pass link
-app.get('/api/wallet/google/:code', async (req, res) => {
-  const code = req.params.code;
-  try {
-    const result = await pool.query(
-      `SELECT * FROM promotions 
-       WHERE code = $1 
-         AND is_active = true 
-         AND starts_at <= NOW() 
-         AND expires_at > NOW()`,
-      [code]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(400).send('This offer is no longer active or has expired.');
-    }
-
-    const walletUrl = createGoogleWalletUrl(result.rows[0]);
-    return res.redirect(walletUrl);
-  } catch (err) {
-    console.error('[Google Wallet Error]:', err.message);
-    return res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// Cashier Coupon Redemption Endpoint (with 24-hour Cooldown)
-app.post('/api/redeem', async (req, res) => {
-  const { couponCode } = req.body;
-  if (!couponCode) return res.status(400).json({ success: false, message: 'Coupon code required' });
-
-  try {
-    const promo = await pool.query('SELECT * FROM promotions WHERE code = $1 AND is_active = true', [couponCode]);
-    if (promo.rows.length === 0) {
-      return res.json({ success: false, message: '❌ Invalid or Disabled Coupon' });
-    }
-
-    const cooldownCheck = await pool.query(
-      `SELECT redeemed_at FROM redemptions 
-       WHERE coupon_code = $1 AND redeemed_at > NOW() - INTERVAL '24 hours' 
-       ORDER BY redeemed_at DESC LIMIT 1`,
-      [couponCode]
-    );
-
-    if (cooldownCheck.rows.length > 0) {
-      const lastRedeemed = new Date(cooldownCheck.rows[0].redeemed_at);
-      const nextAvailable = new Date(lastRedeemed.getTime() + 24 * 60 * 60 * 1000);
-      const timeString = nextAvailable.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-      return res.json({
-        success: false,
-        message: `❌ ALREADY REDEEMED TODAY (Available again tomorrow at ${timeString})`
-      });
-    }
-
-    await pool.query('INSERT INTO redemptions (coupon_code, redeemed_at) VALUES ($1, NOW())', [couponCode]);
-
-    return res.json({
-      success: true,
-      message: `✅ COUPON REDEEMED SUCCESSFULLY! (Locked for 24 hours)`
-    });
-
-  } catch (err) {
-    console.error('Redemption error:', err);
-    res.status(500).json({ success: false, message: 'Server error during redemption.' });
-  }
-});
-
-// Coupon Status Check Endpoint (for Customer Phone Polling)
-app.get('/api/coupon-status', async (req, res) => {
-  try {
-    const { code } = req.query;
-    if (!code) return res.json({ redeemed: false });
-
-    const result = await pool.query(
-      `SELECT redeemed_at FROM redemptions 
-       WHERE coupon_code = $1 AND redeemed_at > NOW() - INTERVAL '24 hours' 
-       ORDER BY redeemed_at DESC LIMIT 1`,
-      [code]
-    );
-
-    if (result.rows.length > 0) {
-      const lastRedeemed = new Date(result.rows[0].redeemed_at);
-      const unlockTime = new Date(lastRedeemed.getTime() + 24 * 60 * 60 * 1000);
-
-      return res.json({ 
-        redeemed: true, 
-        redeemed_at: result.rows[0].redeemed_at,
-        unlocks_at: unlockTime
-      });
-    }
-
-    res.json({ redeemed: false });
-  } catch (err) {
-    res.status(500).json({ redeemed: false, error: err.message });
-  }
-});
-
-// Admin Authentication Endpoints
+// -------------------------------------------------------------
+// AUTH ROUTES
+// -------------------------------------------------------------
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
-
-  if (!username || !password) {
-    return res.status(400).json({ success: false, message: 'Username and password required.' });
-  }
-
   try {
-    const result = await pool.query('SELECT * FROM users WHERE username = $1', [username.trim().toLowerCase()]);
+    const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
     if (result.rows.length === 0) {
       return res.status(401).json({ success: false, message: 'Invalid username or password.' });
     }
 
     const user = result.rows[0];
-    const passwordMatch = await bcrypt.compare(password, user.password_hash);
-
-    if (!passwordMatch) {
+    const match = await bcrypt.compare(password, user.password_hash);
+    if (!match) {
       return res.status(401).json({ success: false, message: 'Invalid username or password.' });
     }
 
-    return res.json({
-      success: true,
-      username: user.username,
-      role: user.role,
-      token: `auth_${user.id}_${Date.now()}`
-    });
+    const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '12h' });
+    res.json({ success: true, token, message: 'Login successful!' });
   } catch (err) {
-    console.error('[Login Error]:', err.message);
-    return res.status(500).json({ success: false, message: 'Server error during login.' });
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 
 app.post('/api/admin/add-user', verifyAdminToken, async (req, res) => {
   const { newUsername, newPassword } = req.body;
-
-  if (!newUsername || !newPassword) {
-    return res.status(400).json({ success: false, message: 'New username and password required.' });
-  }
-
   try {
-    const hashedPassword = await bcrypt.hash(newPassword.trim(), 10);
+    const hashedPw = await bcrypt.hash(newPassword, 10);
     await pool.query(
       'INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)',
-      [newUsername.trim().toLowerCase(), hashedPassword, 'admin']
+      [newUsername, hashedPw, 'admin']
     );
-
-    return res.json({ success: true, message: `User "${newUsername}" created successfully!` });
+    res.json({ success: true, message: `User "${newUsername}" created successfully.` });
   } catch (err) {
     if (err.code === '23505') {
       return res.status(400).json({ success: false, message: 'Username already exists.' });
     }
-    console.error('[Add User Error]:', err.message);
-    return res.status(500).json({ success: false, message: 'Database error creating user.' });
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// ==============================================
-// Socket.io Real-Time Handler
-// ==============================================
-io.on('connection', (socket) => {
-  socket.on('checkLocation', async (data) => {
-    const { latitude, longitude } = data;
-    if (!latitude || !longitude) {
-      socket.emit('locationResult', { inside: false, message: 'Invalid GPS.' });
-      return;
-    }
-
-    let nearestStore = null;
-    let minDistance = Infinity;
-    let isInside = false;
-
-    for (const store of STORES) {
-      const distance = getDistanceFromLatLonInMiles(latitude, longitude, store.lat, store.lng);
-      if (distance < minDistance) {
-        minDistance = distance;
-        nearestStore = store;
-      }
-      if (distance <= store.radiusMiles) {
-        isInside = true;
-      }
-    }
-
-    let availablePromos = [];
-    if (isInside) {
-      const result = await pool.query(
-        `SELECT * FROM promotions 
-         WHERE is_active = true 
-           AND starts_at <= NOW() 
-           AND expires_at > NOW() 
-         ORDER BY id ASC`
-      );
-      availablePromos = result.rows;
-    }
-
-    socket.emit('locationResult', {
-      inside: isInside,
-      storeName: nearestStore ? nearestStore.name : "Smoke N Chill",
-      distanceMiles: parseFloat(minDistance.toFixed(2)),
-      promotions: availablePromos
-    });
-  });
+// -------------------------------------------------------------
+// PROMOTION ROUTES
+// -------------------------------------------------------------
+app.get('/api/promotions/all', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM promotions ORDER BY id ASC');
+    res.json({ success: true, promotions: result.rows });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
-// ==============================================
-// Start Server
-// ==============================================
-server.listen(PORT, () => {
-  console.log('==============================================');
-  console.log(' Smoke N Chill - Multi-Store Promo Engine Running');
-  console.log(` Local: http://127.0.0.1:${PORT}`);
-  console.log('==============================================');
+app.post('/api/promotions/toggle', async (req, res) => {
+  const { code, is_active } = req.body;
+  try {
+    await pool.query('UPDATE promotions SET is_active = $1 WHERE code = $2', [is_active, code]);
+    io.emit('promoStateUpdated');
+    res.json({ success: true, message: 'Promotion state updated.' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
+
+app.post('/api/promotions/delete', verifyAdminToken, async (req, res) => {
+  const { code } = req.body;
+  try {
+    const result = await pool.query('DELETE FROM promotions WHERE code = $1', [code]);
+    if (result.rowCount === 0) {
+      return res.status(444).json({ success: false, message: 'Promotion code not found.' });
+    }
+    io.emit('promoStateUpdated');
+    res.json({ success: true, message: `Promotion "${code}" deleted successfully.` });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/redeem', async (req, res) => {
+  const { couponCode } = req.body;
+  try {
+    const result = await pool.query('SELECT * FROM promotions WHERE code = $1 AND is_active = true', [couponCode]);
+    if (result.rows.length === 0) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired coupon code.' });
+    }
+
+    await pool.query('INSERT INTO redemptions (coupon_code) VALUES ($1)', [couponCode]);
+    res.json({ success: true, message: `Coupon "${couponCode}" redeemed successfully!` });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// ANNOUNCEMENT & NEWSLETTER ROUTES
+// -------------------------------------------------------------
+app.get('/api/announcements', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM announcements WHERE is_active = true ORDER BY created_at DESC');
+    res.json({ success: true, announcements: result.rows });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/admin/announcements', verifyAdminToken, async (req, res) => {
+  const { title, message, type } = req.body;
+  try {
+    await pool.query(
+      'INSERT INTO announcements (title, message, type) VALUES ($1, $2, $3)',
+      [title, message, type || 'info']
+    );
+    io.emit('announcementsUpdated');
+    res.json({ success: true, message: '
