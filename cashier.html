@@ -1,309 +1,341 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Smoke N Chill - Register & Admin Terminal</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smoke N Chill - Cashier & Admin Portal</title>
+  <script src="/socket.io/socket.io.js"></script>
   <style>
-    body {
-      background-color: #0d0d12;
-      color: #fff;
-      font-family: 'Segoe UI', Arial, sans-serif;
-      margin: 0;
-      padding: 20px;
+    :root {
+      --bg-dark: #0f1117;
+      --card-bg: #181b24;
+      --border-color: #2a2e3d;
+      --accent-green: #00e676;
+      --accent-green-hover: #00c853;
+      --danger-red: #ff5252;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
     }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      padding: 24px;
+      min-height: 100vh;
+    }
+
     .header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      border-bottom: 2px solid #222;
-      padding-bottom: 15px;
-      margin-bottom: 25px;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border-color);
     }
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 15px;
+
+    .header h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
     }
-    .brand img { 
-      width: 50px; 
-      height: 50px;
-      object-fit: contain;
-    }
-    
-    .user-badge {
-      background: #181824;
-      border: 1px solid #2a2a3d;
-      padding: 8px 16px;
-      border-radius: 8px;
-      font-size: 0.9rem;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    .user-badge span { color: #00ff87; font-weight: bold; }
 
     .grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
       gap: 20px;
     }
-    .full-width { grid-column: 1 / -1; }
-    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
-    
-    .panel {
-      background: #181824;
-      border: 1px solid #2a2a3d;
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
       border-radius: 12px;
       padding: 20px;
-      position: relative;
-    }
-    .panel-locked {
-      opacity: 0.5;
-      pointer-events: none;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
     }
 
-    label {
-      display: block;
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-subtitle {
       font-size: 0.85rem;
-      color: #aaa;
-      margin-top: 10px;
-      margin-bottom: 4px;
+      color: var(--text-muted);
+      margin-bottom: 16px;
     }
-    input[type="text"], input[type="password"], input[type="datetime-local"] {
+
+    .form-group {
+      margin-bottom: 14px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    input[type="text"],
+    input[type="password"] {
       width: 100%;
-      padding: 12px;
-      border-radius: 8px;
-      border: 1px solid #333;
-      background: #09090e;
-      color: #00ff87;
-      font-size: 1rem;
-      box-sizing: border-box;
+      padding: 12px 14px;
+      background: #0b0d12;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      color: #fff;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s;
     }
-    input[type="text"]:focus, input[type="password"]:focus {
-      outline: 2px solid #00ff87;
+
+    input:focus {
+      border-color: var(--accent-green);
     }
+
     .btn {
       width: 100%;
-      padding: 14px;
-      background: #00ff87;
-      color: #000;
-      font-weight: bold;
+      padding: 12px;
       border: none;
-      border-radius: 8px;
-      font-size: 1rem;
+      border-radius: 6px;
+      background: var(--accent-green);
+      color: #000;
+      font-weight: 700;
+      font-size: 0.95rem;
       cursor: pointer;
-      margin-top: 15px;
-      transition: background 0.2s ease;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      transition: background 0.2s, transform 0.1s;
     }
-    .btn:hover { background: #00e077; }
-    .btn-secondary {
-      background: #2a2a3d;
+
+    .btn:hover {
+      background: var(--accent-green-hover);
+    }
+
+    .btn:active {
+      transform: scale(0.99);
+    }
+
+    .btn-danger {
+      background: var(--danger-red);
       color: #fff;
+      width: auto;
       padding: 6px 12px;
+      font-size: 0.8rem;
+    }
+
+    .btn-danger:hover {
+      background: #e53935;
+    }
+
+    .btn-secondary {
+      background: #2a2e3d;
+      color: #fff;
+      width: auto;
+      padding: 6px 12px;
+      font-size: 0.8rem;
+    }
+
+    .btn-secondary:hover {
+      background: #3b4054;
+    }
+
+    .alert-status {
+      margin-top: 10px;
+      padding: 10px;
       border-radius: 6px;
       font-size: 0.85rem;
-      border: none;
-      cursor: pointer;
-    }
-    .btn-secondary:hover { background: #3a3a52; }
-
-    .alert {
-      padding: 15px;
-      border-radius: 8px;
-      margin-top: 15px;
-      font-weight: bold;
-      font-size: 1.1rem;
+      font-weight: 600;
       text-align: center;
       display: none;
     }
-    .alert-success { background: rgba(0,255,135,0.2); border: 2px solid #00ff87; color: #00ff87; }
-    .alert-error { background: rgba(255,71,87,0.2); border: 2px solid #ff4757; color: #ff4757; }
 
-    .toggle-row {
+    .alert-success {
+      background: rgba(0, 230, 118, 0.15);
+      border: 1px solid var(--accent-green);
+      color: var(--accent-green);
+    }
+
+    .alert-error {
+      background: rgba(255, 82, 82, 0.15);
+      border: 1px solid var(--danger-red);
+      color: var(--danger-red);
+    }
+
+    .promo-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-height: 480px;
+      overflow-y: auto;
+    }
+
+    .promo-item {
+      background: #0b0d12;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 14px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 12px 0;
-      border-bottom: 1px solid #2a2a3d;
     }
-    .action-group {
+
+    .promo-info h4 {
+      font-size: 0.95rem;
+      color: #fff;
+      margin-bottom: 2px;
+    }
+
+    .promo-info p {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .promo-actions {
       display: flex;
       gap: 8px;
-      align-items: center;
     }
-    .toggle-btn {
-      padding: 6px 12px;
-      border-radius: 6px;
-      border: none;
-      font-weight: bold;
-      cursor: pointer;
-    }
-    .btn-on { background: #00ff87; color: #000; }
-    .btn-off { background: #ff4757; color: #fff; }
 
-    .btn-delete {
-      background: rgba(255, 71, 87, 0.2);
-      border: 1px solid #ff4757;
-      color: #ff4757;
-      padding: 6px 10px;
-      border-radius: 6px;
-      font-weight: bold;
-      cursor: pointer;
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      margin-left: 6px;
     }
-    .btn-delete:hover { background: rgba(255, 71, 87, 0.4); }
 
-    .form-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-    }
-    @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
-    
-    .login-overlay {
-      background: rgba(0,0,0,0.85);
-      border: 1px solid #ff4757;
-      padding: 15px;
-      border-radius: 8px;
-      color: #ff4757;
-      text-align: center;
-      margin-bottom: 15px;
-      font-weight: bold;
-    }
+    .badge-active { background: rgba(0, 230, 118, 0.2); color: var(--accent-green); }
+    .badge-disabled { background: rgba(148, 163, 184, 0.2); color: var(--text-muted); }
   </style>
 </head>
 <body>
 
   <div class="header">
-    <div class="brand">
-      <img src="Snc3-logo.png" alt="Smoke N Chill Logo" />
-      <h2>Smoke N Chill - Register & Admin Terminal</h2>
-    </div>
-    <div class="user-badge" id="authBadge">
-      🔒 Admin Locked
-    </div>
+    <h1>Smoke N Chill — Cashier & Admin Portal</h1>
+    <div id="sessionStatus" style="font-size: 0.85rem; color: var(--text-muted);">Status: Guest Mode</div>
   </div>
 
   <div class="grid">
-    <!-- Panel 1: Admin Login Card -->
-    <div class="panel" id="loginPanel">
-      <h3>🔑 Admin / Manager Login</h3>
-      <p style="color: #aaa; font-size: 0.85rem; margin-top:0;">Log in to unlock promo creation and manage authorized users.</p>
+    <!-- Admin Login -->
+    <div class="card">
+      <div class="card-title">🔑 Admin / Manager Login</div>
+      <div class="card-subtitle">Log in to unlock promo creation and manage authorized users.</div>
       
-      <div id="loginFormArea">
-        <label for="loginUser">Username</label>
-        <input type="text" id="loginUser" placeholder="admin" />
-        <label for="loginPass">Password</label>
-        <input type="password" id="loginPass" placeholder="••••••••" />
-        <button class="btn" onclick="loginAdmin()">LOG IN AS ADMIN</button>
+      <form id="loginForm" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input type="text" id="username" placeholder="admin" required>
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" placeholder="••••••••" required>
+        </div>
+        <button type="submit" class="btn">Log In</button>
+      </form>
+      <div id="loginStatus" class="alert-status"></div>
+    </div>
+
+    <!-- Create Admin User -->
+    <div class="card">
+      <div class="card-title">👤 Create New Admin User</div>
+      <div class="card-subtitle">Create sub-admin logins for shift managers to publish offers.</div>
+      
+      <form id="createUserForm" onsubmit="handleCreateUser(event)">
+        <div class="form-group">
+          <label for="newUsername">New Username</label>
+          <input type="text" id="newUsername" placeholder="manager1" required>
+        </div>
+        <div class="form-group">
+          <label for="newPassword">New Password</label>
+          <input type="password" id="newPassword" placeholder="••••••••" required>
+        </div>
+        <button type="submit" class="btn">Create New User</button>
+      </form>
+      <div id="createUserStatus" class="alert-status"></div>
+    </div>
+
+    <!-- Scan / Redeem Coupon -->
+    <div class="card">
+      <div class="card-title">⚡ Scan / Redeem Coupon Code</div>
+      <div class="card-subtitle">Point scanner at phone screen or type code and press Enter.</div>
+      
+      <form id="redeemForm" onsubmit="handleRedeem(event)">
+        <div class="form-group">
+          <label for="couponCode">Coupon Code or QR Scan</label>
+          <input type="text" id="couponCode" placeholder="Scan QR or enter code..." required autofocus>
+        </div>
+        <button type="submit" class="btn">Redeem Coupon</button>
+      </form>
+      <div id="redeemStatus" class="alert-status"></div>
+    </div>
+
+    <!-- Store Inventory Controls -->
+    <div class="card">
+      <div class="card-title">📦 Store Inventory Controls</div>
+      <div class="card-subtitle">Toggle stock state or delete promotions. Changes update live.</div>
+      
+      <div id="promoList" class="promo-list">
+        <!-- Live promo items populate here -->
       </div>
-      <div id="loginAlert" class="alert"></div>
-    </div>
-
-    <!-- Panel 2: Register User Card (Admin Only) -->
-    <div class="panel panel-locked" id="addUserPanel">
-      <h3>👥 Add Authorized Admin User</h3>
-      <p style="color: #aaa; font-size: 0.85rem; margin-top:0;">Create sub-admin logins for shift managers to publish offers.</p>
-      
-      <label for="newAdminUser">New Username</label>
-      <input type="text" id="newAdminUser" placeholder="manager1" />
-      <label for="newAdminPass">New Password</label>
-      <input type="password" id="newAdminPass" placeholder="••••••••" />
-      <button class="btn" onclick="addAdminUser()">CREATE NEW USER</button>
-      <div id="addUserAlert" class="alert"></div>
-    </div>
-
-    <!-- Panel 3: Coupon Scanner & Redemption -->
-    <div class="panel">
-      <h3>⚡ Scan / Redeem Coupon Code</h3>
-      <p style="color: #aaa; font-size: 0.85rem; margin-top:0;">Point scanner at phone screen or type code and press Enter.</p>
-      <label for="couponInput">Coupon Code or QR Scan</label>
-      <input type="text" id="couponInput" placeholder="Scan QR or enter code..." autofocus />
-      <button class="btn" onclick="redeemCoupon()">REDEEM COUPON</button>
-      <div id="resultAlert" class="alert"></div>
-    </div>
-
-    <!-- Panel 4: Promo Inventory & Disabling Controls -->
-    <div class="panel">
-      <h3>📦 Store Inventory Controls</h3>
-      <p style="color: #aaa; font-size: 0.85rem; margin-top:0;">Toggle stock state or delete promotions. Changes update live.</p>
-      <div id="promoToggles"></div>
-    </div>
-
-    <!-- Panel 5: Create / Add New Promotion Special (Admin Only) -->
-    <div class="panel full-width panel-locked" id="createPromoPanel">
-      <h3>➕ Create New Special Offer</h3>
-      <div id="lockNotice" class="login-overlay">🔒 Admin Login Required Above to Publish Offers</div>
-      <p style="color: #aaa; font-size: 0.85rem; margin-top:0;">Add a new promotion directly to customer apps and Google Wallet pass system.</p>
-      
-      <div class="form-grid">
-        <div>
-          <label for="newCode">Promo Code (e.g. VIPGLASS25)</label>
-          <input type="text" id="newCode" placeholder="VIPGLASS25" />
-        </div>
-        <div>
-          <label for="newBadge">Discount Badge Text (e.g. 25% OFF)</label>
-          <input type="text" id="newBadge" placeholder="25% OFF" />
-        </div>
-        <div style="grid-column: 1 / -1;">
-          <label for="newTitle">Full Offer Title / Description</label>
-          <input type="text" id="newTitle" placeholder="25% Off Premium Glassware & Rig Setups" />
-        </div>
-        <div style="grid-column: 1 / -1;">
-          <label for="newExpires">Expiration Date & Time</label>
-          <input type="datetime-local" id="newExpires" />
-        </div>
-      </div>
-
-      <button class="btn" onclick="createPromo()">PUBLISH NEW PROMOTION</button>
-      <div id="createAlert" class="alert"></div>
     </div>
   </div>
 
   <script>
-    let authToken = localStorage.getItem('adminToken') || null;
-    let authUser = localStorage.getItem('adminUser') || null;
+    const socket = io();
 
-    // Set default expiration date to 30 days from now
-    const now = new Date();
-    now.setDate(now.getDate() + 30);
-    document.getElementById('newExpires').value = now.toISOString().slice(0, 16);
-
-    // Auto-redeem when 2D barcode scanner hits Enter
-    document.getElementById('couponInput').addEventListener('keypress', function (e) {
-      if (e.key === 'Enter') {
-        redeemCoupon();
-      }
+    // Check existing session token on startup
+    document.addEventListener('DOMContentLoaded', () => {
+      updateSessionUI();
+      loadPromotions();
     });
 
-    function updateAuthStateUI() {
-      const badge = document.getElementById('authBadge');
-      const addPanel = document.getElementById('addUserPanel');
-      const createPanel = document.getElementById('createPromoPanel');
-      const lockNotice = document.getElementById('lockNotice');
-      const loginFormArea = document.getElementById('loginFormArea');
+    socket.on('promoStateUpdated', () => {
+      loadPromotions();
+    });
 
-      if (authToken) {
-        badge.innerHTML = `👤 Logged in: <span>${authUser}</span> <button class="btn-secondary" onclick="logoutAdmin()">Logout</button>`;
-        addPanel.classList.remove('panel-locked');
-        createPanel.classList.remove('panel-locked');
-        lockNotice.style.display = 'none';
-        loginFormArea.style.display = 'none';
+    function getAuthToken() {
+      return localStorage.getItem('adminToken') || '';
+    }
+
+    function updateSessionUI() {
+      const token = getAuthToken();
+      const statusEl = document.getElementById('sessionStatus');
+      if (token) {
+        statusEl.textContent = 'Status: Logged in as Admin';
+        statusEl.style.color = 'var(--accent-green)';
       } else {
-        badge.innerHTML = `🔒 Admin Locked`;
-        addPanel.classList.add('panel-locked');
-        createPanel.classList.add('panel-locked');
-        lockNotice.style.display = 'block';
-        loginFormArea.style.display = 'block';
+        statusEl.textContent = 'Status: Guest Mode (Authentication Required for Admin Actions)';
+        statusEl.style.color = 'var(--text-muted)';
       }
     }
 
-    async function loginAdmin() {
-      const username = document.getElementById('loginUser').value.trim();
-      const password = document.getElementById('loginPass').value.trim();
-      const alertBox = document.getElementById('loginAlert');
+    function showStatus(elementId, message, isSuccess) {
+      const el = document.getElementById(elementId);
+      el.textContent = message;
+      el.className = `alert-status ${isSuccess ? 'alert-success' : 'alert-error'}`;
+      el.style.display = 'block';
+    }
 
-      if (!username || !password) return;
+    // ==============================================
+    // Admin Login Handler
+    // ==============================================
+    async function handleLogin(e) {
+      e.preventDefault();
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value.trim();
 
       try {
         const res = await fetch('/api/auth/login', {
@@ -311,173 +343,172 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username, password })
         });
-
         const data = await res.json();
-        alertBox.style.display = 'block';
-        alertBox.className = 'alert ' + (data.success ? 'alert-success' : 'alert-error');
-        alertBox.innerText = data.message || (data.success ? 'Login successful!' : 'Login failed');
+
+        if (data.success && data.token) {
+          localStorage.setItem('adminToken', data.token);
+          showStatus('loginStatus', 'Login successful!', true);
+          updateSessionUI();
+        } else {
+          showStatus('loginStatus', data.message || 'Login failed', false);
+        }
+      } catch (err) {
+        showStatus('loginStatus', 'Connection error during login.', false);
+      }
+    }
+
+    // ==============================================
+    // Create Admin User Handler
+    // ==============================================
+    async function handleCreateUser(e) {
+      e.preventDefault();
+      const newUsername = document.getElementById('newUsername').value.trim();
+      const newPassword = document.getElementById('newPassword').value.trim();
+      const token = getAuthToken();
+
+      if (!token) {
+        showStatus('createUserStatus', 'Admin authentication required. Log in first.', false);
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/admin/add-user', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ newUsername, newPassword })
+        });
+        const data = await res.json();
 
         if (data.success) {
-          authToken = data.token;
-          authUser = data.username;
-          localStorage.setItem('adminToken', authToken);
-          localStorage.setItem('adminUser', authUser);
-          updateAuthStateUI();
-        }
-      } catch (err) {
-        alertBox.style.display = 'block';
-        alertBox.className = 'alert alert-error';
-        alertBox.innerText = 'Server connection error during login.';
-      }
-    }
-
-    function logoutAdmin() {
-      authToken = null;
-      authUser = null;
-      localStorage.removeItem('adminToken');
-      localStorage.removeItem('adminUser');
-      updateAuthStateUI();
-    }
-
-    async function addAdminUser() {
-      const newUsername = document.getElementById('newAdminUser').value.trim();
-      const newPassword = document.getElementById('newAdminPass').value.trim();
-      const alertBox = document.getElementById('addUserAlert');
-
-      const res = await fetch('/api/admin/add-user', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': authToken
-        },
-        body: JSON.stringify({ newUsername, newPassword })
-      });
-
-      const data = await res.json();
-      alertBox.style.display = 'block';
-      alertBox.className = 'alert ' + (data.success ? 'alert-success' : 'alert-error');
-      alertBox.innerText = data.message;
-
-      if (data.success) {
-        document.getElementById('newAdminUser').value = '';
-        document.getElementById('newAdminPass').value = '';
-      }
-    }
-
-    async function createPromo() {
-      const code = document.getElementById('newCode').value.trim();
-      const badge = document.getElementById('newBadge').value.trim();
-      const title = document.getElementById('newTitle').value.trim();
-      const expires = document.getElementById('newExpires').value;
-      const alertBox = document.getElementById('createAlert');
-
-      const res = await fetch('/api/promotions/create', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': authToken
-        },
-        body: JSON.stringify({ code, discount_text: badge, title, expires_at: expires })
-      });
-
-      const data = await res.json();
-      alertBox.style.display = 'block';
-      alertBox.className = 'alert ' + (data.success ? 'alert-success' : 'alert-error');
-      alertBox.innerText = data.message;
-
-      if (data.success) {
-        document.getElementById('newCode').value = '';
-        document.getElementById('newBadge').value = '';
-        document.getElementById('newTitle').value = '';
-        loadPromos();
-      }
-    }
-
-    async function loadPromos() {
-      try {
-        const res = await fetch('/api/promotions/all');
-        const data = await res.json();
-        const container = document.getElementById('promoToggles');
-        container.innerHTML = '';
-
-        if (data.promotions && data.promotions.length > 0) {
-          data.promotions.forEach(p => {
-            const exp = new Date(p.expires_at).toLocaleDateString();
-            container.innerHTML += `
-              <div class="toggle-row">
-                <div>
-                  <strong>${p.code}</strong> - ${p.title} (${p.discount_text})
-                  <br><small style="color:#888;">Expires: ${exp}</small>
-                </div>
-                <div class="action-group">
-                  <button class="toggle-btn ${p.is_active ? 'btn-on' : 'btn-off'}" onclick="togglePromo('${p.code}', ${!p.is_active})">
-                    ${p.is_active ? 'IN STOCK' : 'DISABLED'}
-                  </button>
-                  <button class="btn-delete" onclick="deletePromo('${p.code}')">✖</button>
-                </div>
-              </div>
-            `;
-          });
+          showStatus('createUserStatus', data.message, true);
+          document.getElementById('createUserForm').reset();
         } else {
-          container.innerHTML = '<p style="color:#888;">No promotions created yet.</p>';
+          showStatus('createUserStatus', data.message || 'Failed to create user.', false);
         }
       } catch (err) {
-        console.error('Failed to load promos:', err);
+        showStatus('createUserStatus', 'Connection error.', false);
       }
     }
 
-    async function togglePromo(code, newState) {
-      await fetch('/api/promotions/toggle', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, is_active: newState })
-      });
-      loadPromos();
-    }
-
-    async function deletePromo(code) {
-      if (!confirm(`Are you sure you want to delete promotion "${code}"?`)) return;
-
-      const res = await fetch('/api/promotions/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code })
-      });
-
-      const data = await res.json();
-      if (data.success) loadPromos();
-      else alert(data.message || 'Error deleting promotion.');
-    }
-
-    async function redeemCoupon() {
-      const input = document.getElementById('couponInput');
-      const alertBox = document.getElementById('resultAlert');
-      const code = input.value.trim();
-
-      if (!code) return;
+    // ==============================================
+    // Coupon Redemption Handler
+    // ==============================================
+    async function handleRedeem(e) {
+      e.preventDefault();
+      const input = document.getElementById('couponCode');
+      const couponCode = input.value.trim().toUpperCase();
 
       try {
         const res = await fetch('/api/redeem', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ couponCode: code })
+          body: JSON.stringify({ couponCode })
         });
-
         const data = await res.json();
-        alertBox.style.display = 'block';
-        alertBox.className = 'alert ' + (data.success ? 'alert-success' : 'alert-error');
-        alertBox.innerText = data.message;
+
+        showStatus('redeemStatus', data.message, data.success);
         input.value = '';
         input.focus();
       } catch (err) {
-        alertBox.style.display = 'block';
-        alertBox.className = 'alert alert-error';
-        alertBox.innerText = '❌ Failed to reach server to verify coupon.';
+        showStatus('redeemStatus', 'Error attempting coupon redemption.', false);
       }
     }
 
-    updateAuthStateUI();
-    loadPromos();
+    // ==============================================
+    // Fetch & Display Promotions
+    // ==============================================
+    async function loadPromotions() {
+      try {
+        const res = await fetch('/api/promotions/all');
+        const data = await res.json();
+
+        if (!data.success) return;
+
+        const container = document.getElementById('promoList');
+        container.innerHTML = '';
+
+        data.promotions.forEach(promo => {
+          const item = document.createElement('div');
+          item.className = 'promo-item';
+
+          const expDate = new Date(promo.expires_at).toLocaleDateString();
+          const badgeClass = promo.is_active ? 'badge-active' : 'badge-disabled';
+          const badgeText = promo.is_active ? 'ACTIVE' : 'DISABLED';
+
+          item.innerHTML = `
+            <div class="promo-info">
+              <h4>${promo.code} - ${promo.title} <span class="badge ${badgeClass}">${badgeText}</span></h4>
+              <p>Expires: ${expDate}</p>
+            </div>
+            <div class="promo-actions">
+              <button class="btn btn-secondary" onclick="togglePromo('${promo.code}', ${promo.is_active})">
+                ${promo.is_active ? 'Disable' : 'Enable'}
+              </button>
+              <button class="btn btn-danger" onclick="deletePromo('${promo.code}')">Delete</button>
+            </div>
+          `;
+          container.appendChild(item);
+        });
+      } catch (err) {
+        console.error('Error loading promotions:', err);
+      }
+    }
+
+    // ==============================================
+    // Toggle Promotion Status
+    // ==============================================
+    async function togglePromo(code, currentState) {
+      try {
+        await fetch('/api/promotions/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, is_active: !currentState })
+        });
+        loadPromotions();
+      } catch (err) {
+        alert('Failed to toggle promotion state.');
+      }
+    }
+
+    // ==============================================
+    // Delete Promotion (WITH FIX)
+    // ==============================================
+    async function deletePromo(code) {
+      if (!confirm(`Are you sure you want to delete promotion "${code}"?`)) return;
+
+      const token = getAuthToken();
+
+      if (!token) {
+        alert('Admin authentication required. Please log in first using the Admin Login card.');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/promotions/delete', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ code })
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+          alert(data.message);
+          loadPromotions();
+        } else {
+          alert(data.message);
+        }
+      } catch (err) {
+        console.error('Delete error:', err);
+        alert('Failed to delete promotion. Server error.');
+      }
+    }
   </script>
 </body>
 </html>
