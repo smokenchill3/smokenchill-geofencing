@@ -5,6 +5,7 @@ const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
@@ -13,6 +14,102 @@ const io = new Server(server, { cors: { origin: '*' } });
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'smokenchill_secret_key_2026';
 
+// ==============================================
+// Google Wallet Configuration
+// ==============================================
+const ISSUER_ID = '3388000000023201282';
+const CLASS_ID = `${ISSUER_ID}.smoke_n_chill_promo`;
+
+function getServiceAccount() {
+  if (process.env.SERVICE_ACCOUNT_JSON) {
+    try {
+      const sa = typeof process.env.SERVICE_ACCOUNT_JSON === 'string'
+        ? JSON.parse(process.env.SERVICE_ACCOUNT_JSON)
+        : process.env.SERVICE_ACCOUNT_JSON;
+      
+      if (sa && sa.private_key) {
+        sa.private_key = sa.private_key.replace(/\\n/g, '\n');
+      }
+      return sa;
+    } catch (err) {
+      console.error('[Service Account Error] Failed to parse SERVICE_ACCOUNT_JSON:', err.message);
+      return null;
+    }
+  } else if (fs.existsSync('./service-account.json')) {
+    try {
+      const sa = JSON.parse(fs.readFileSync('./service-account.json', 'utf8'));
+      if (sa && sa.private_key) {
+        sa.private_key = sa.private_key.replace(/\\n/g, '\n');
+      }
+      return sa;
+    } catch (err) {
+      console.error('[Service Account Error] Failed to read service-account.json:', err.message);
+      return null;
+    }
+  }
+  return null;
+}
+
+function createGoogleWalletUrl(promo) {
+  const serviceAccount = getServiceAccount();
+
+  if (!serviceAccount) {
+    throw new Error('Google service-account.json credentials are missing or invalid on server.');
+  }
+
+  const objectId = `${ISSUER_ID}.${promo.code.replace(/[^a-zA-Z0-9_.-]/g, '_')}_${Date.now()}`;
+
+  const claims = {
+    iss: serviceAccount.client_email,
+    aud: 'google',
+    origins: ['*'],
+    typ: 'savetowallet',
+    payload: {
+      genericObjects: [
+        {
+          id: objectId,
+          classId: CLASS_ID,
+          state: 'ACTIVE',
+          hexBackgroundColor: '#0f0f15',
+          cardTitle: {
+            defaultValue: { language: 'en-US', value: 'Smoke N Chill' }
+          },
+          header: {
+            defaultValue: { language: 'en-US', value: promo.discount_text }
+          },
+          subheader: {
+            defaultValue: { language: 'en-US', value: promo.title }
+          },
+          logo: {
+            sourceUri: { uri: 'https://smokenchill-geofencing.onrender.com/Snc3-logo.png' },
+            contentDescription: { defaultValue: { language: 'en-US', value: 'Smoke N Chill Logo' } }
+          },
+          heroImage: {
+            sourceUri: { uri: 'https://smokenchill-geofencing.onrender.com/Snc3-Entrance.jpg' },
+            contentDescription: { defaultValue: { language: 'en-US', value: 'Smoke N Chill Banner' } }
+          },
+          barcode: {
+            type: 'QR_CODE',
+            value: promo.code,
+            alternateText: promo.code
+          },
+          textModulesData: [
+            { header: 'COUPON CODE', body: promo.code, id: 'code_module' },
+            { header: 'EXPIRES', body: new Date(promo.expires_at).toLocaleDateString(), id: 'exp_module' },
+            { header: 'INSTRUCTIONS', body: 'Show this QR code to the cashier (Must be 21+)', id: 'instructions_module' }
+          ]
+        }
+      ]
+    }
+  };
+
+  const token = jwt.sign(claims, serviceAccount.private_key, { algorithm: 'RS256' });
+  return `https://pay.google.com/gp/v/save/${token}`;
+}
+
+// ==============================================
+// PostgreSQL Connection & Setup
+// ==============================================
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
@@ -165,6 +262,29 @@ app.post('/api/verify-location', (req, res) => {
       ? `Unlocked! Nearest store: ${nearestStore.name} (${minDistance.toFixed(1)} miles away).`
       : `You are ${minDistance.toFixed(1)} miles away. Offers require being within 15 miles of a store.`
   });
+});
+
+// ==============================================
+// Google Wallet Endpoint
+// ==============================================
+app.get('/api/wallet/google/:code', async (req, res) => {
+  const code = req.params.code;
+  try {
+    const result = await pool.query(
+      'SELECT * FROM promotions WHERE code = $1 AND is_active = true AND expires_at > NOW()',
+      [code]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).send('This offer is no longer active or has expired.');
+    }
+
+    const walletUrl = createGoogleWalletUrl(result.rows[0]);
+    return res.redirect(walletUrl);
+  } catch (err) {
+    console.error('[Google Wallet Error]:', err.message);
+    return res.status(500).send(`Google Wallet Integration Error: ${err.message}`);
+  }
 });
 
 // ==============================================
