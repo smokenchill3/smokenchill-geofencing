@@ -365,18 +365,90 @@ app.post('/api/promotions/delete', verifyAdminToken, async (req, res) => {
   }
 });
 
+// ==============================================
+// Redemption Route (With 24-Hour Cooldown Enforcement)
+// ==============================================
 app.post('/api/redeem', async (req, res) => {
   const { couponCode } = req.body;
+  if (!couponCode) {
+    return res.status(400).json({ success: false, message: 'Coupon code required.' });
+  }
+
+  const code = couponCode.trim().toUpperCase();
+
   try {
-    const result = await pool.query('SELECT * FROM promotions WHERE code = $1 AND is_active = true', [couponCode]);
-    if (result.rows.length === 0) {
-      return res.status(400).json({ success: false, message: 'Invalid or expired coupon code.' });
+    // 1. Verify promo exists, is active, and not expired
+    const promo = await pool.query(
+      'SELECT * FROM promotions WHERE code = $1 AND is_active = true AND expires_at > NOW()',
+      [code]
+    );
+
+    if (promo.rows.length === 0) {
+      return res.status(400).json({ success: false, message: '❌ Invalid, disabled, or expired coupon code.' });
     }
 
-    await pool.query('INSERT INTO redemptions (coupon_code) VALUES ($1)', [couponCode]);
-    res.json({ success: true, message: `Coupon "${couponCode}" redeemed successfully!` });
+    // 2. Check for redemption within the last 24 hours
+    const cooldownCheck = await pool.query(
+      `SELECT redeemed_at FROM redemptions 
+       WHERE coupon_code = $1 AND redeemed_at > NOW() - INTERVAL '24 hours' 
+       ORDER BY redeemed_at DESC LIMIT 1`,
+      [code]
+    );
+
+    if (cooldownCheck.rows.length > 0) {
+      const lastRedeemed = new Date(cooldownCheck.rows[0].redeemed_at);
+      const nextAvailable = new Date(lastRedeemed.getTime() + 24 * 60 * 60 * 1000);
+      const timeString = nextAvailable.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      return res.status(400).json({
+        success: false,
+        message: `❌ Coupon already redeemed! Unlocks tomorrow at ${timeString}.`
+      });
+    }
+
+    // 3. Record redemption timestamp
+    await pool.query('INSERT INTO redemptions (coupon_code) VALUES ($1)', [code]);
+
+    return res.json({
+      success: true,
+      message: `✅ Coupon "${code}" redeemed successfully! (Locked for 24 hours)`
+    });
+
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('Redemption error:', err);
+    res.status(500).json({ success: false, message: 'Server error during redemption.' });
+  }
+});
+
+// ==============================================
+// Coupon Status Endpoint (24-Hour Check)
+// ==============================================
+app.get('/api/coupon-status', async (req, res) => {
+  try {
+    const { code } = req.query;
+    if (!code) return res.json({ redeemed: false });
+
+    const result = await pool.query(
+      `SELECT redeemed_at FROM redemptions 
+       WHERE coupon_code = $1 AND redeemed_at > NOW() - INTERVAL '24 hours' 
+       ORDER BY redeemed_at DESC LIMIT 1`,
+      [code.trim().toUpperCase()]
+    );
+
+    if (result.rows.length > 0) {
+      const lastRedeemed = new Date(result.rows[0].redeemed_at);
+      const unlockTime = new Date(lastRedeemed.getTime() + 24 * 60 * 60 * 1000);
+
+      return res.json({ 
+        redeemed: true, 
+        redeemed_at: result.rows[0].redeemed_at,
+        unlocks_at: unlockTime
+      });
+    }
+
+    res.json({ redeemed: false });
+  } catch (err) {
+    res.status(500).json({ redeemed: false, error: err.message });
   }
 });
 
