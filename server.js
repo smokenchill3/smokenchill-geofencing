@@ -97,10 +97,13 @@ async function initDb() {
           code VARCHAR(50) UNIQUE NOT NULL,
           title VARCHAR(100) NOT NULL,
           discount_text VARCHAR(100) NOT NULL,
+          starts_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           expires_at TIMESTAMP NOT NULL,
           is_active BOOLEAN DEFAULT TRUE,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+
+      ALTER TABLE promotions ADD COLUMN IF NOT EXISTS starts_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 
       CREATE TABLE IF NOT EXISTS users (
           id SERIAL PRIMARY KEY,
@@ -116,11 +119,11 @@ async function initDb() {
           redeemed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
-      INSERT INTO promotions (code, title, discount_text, expires_at, is_active)
+      INSERT INTO promotions (code, title, discount_text, starts_at, expires_at, is_active)
       VALUES 
-        ('SNC5OFF', '$5 Off Glassware & Water Pipes', '$5 OFF', '2026-12-31 23:59:59', true),
-        ('CHILL20', '20% Off Vape Accessories', '20% OFF', '2026-12-31 23:59:59', true),
-        ('SMOKE10', '10% Off Storewide Purchase', '10% OFF', '2026-12-31 23:59:59', true)
+        ('SNC5OFF', '$5 Off Glassware & Water Pipes', '$5 OFF', NOW(), '2026-12-31 23:59:59', true),
+        ('CHILL20', '20% Off Vape Accessories', '20% OFF', NOW(), '2026-12-31 23:59:59', true),
+        ('SMOKE10', '10% Off Storewide Purchase', '10% OFF', NOW(), '2026-12-31 23:59:59', true)
       ON CONFLICT (code) DO UPDATE 
       SET 
         title = EXCLUDED.title,
@@ -170,6 +173,24 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(__dirname));
+
+// ==============================================
+// Authentication Middleware
+// ==============================================
+function verifyAdminToken(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).json({ success: false, message: 'Admin authentication required.' });
+  }
+
+  const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : authHeader;
+
+  if (!token || !token.startsWith('auth_')) {
+    return res.status(403).json({ success: false, message: 'Invalid or expired session token.' });
+  }
+
+  next();
+}
 
 // ==============================================
 // Helper Functions
@@ -292,25 +313,57 @@ app.post('/api/verify-location', (req, res) => {
   });
 });
 
-// Fetch active unexpired promotions
+// Fetch active, live, unexpired promotions
 app.get('/api/promotions', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT * FROM promotions WHERE is_active = true AND expires_at > NOW() ORDER BY id ASC`
+      `SELECT * FROM promotions 
+       WHERE is_active = true 
+         AND starts_at <= NOW() 
+         AND expires_at > NOW() 
+       ORDER BY id ASC`
     );
     res.json({ success: true, promotions: result.rows });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('Error fetching active promotions:', err);
+    res.status(500).json({ success: false, message: 'Database query error.' });
   }
 });
 
-// Fetch all promotions (for cashier toggle panel)
+// Fetch upcoming scheduled promotions
+app.get('/api/promotions/upcoming', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM promotions 
+       WHERE starts_at > NOW() 
+         AND expires_at > NOW()
+       ORDER BY starts_at ASC`
+    );
+    res.json({ success: true, upcomingPromotions: result.rows });
+  } catch (err) {
+    console.error('Error fetching upcoming promotions:', err);
+    res.status(500).json({ success: false, message: 'Database query error.' });
+  }
+});
+
+// Fetch all promotions for admin management view
 app.get('/api/promotions/all', async (req, res) => {
   try {
-    const result = await pool.query(`SELECT * FROM promotions ORDER BY id ASC`);
+    const result = await pool.query(
+      `SELECT *, 
+        CASE 
+          WHEN starts_at > NOW() THEN 'UPCOMING'
+          WHEN expires_at <= NOW() THEN 'EXPIRED'
+          WHEN is_active = false THEN 'DISABLED'
+          ELSE 'ACTIVE'
+        END AS status
+       FROM promotions 
+       ORDER BY created_at DESC`
+    );
     res.json({ success: true, promotions: result.rows });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('Error fetching all promotions:', err);
+    res.status(500).json({ success: false, message: 'Database query error.' });
   }
 });
 
@@ -326,37 +379,40 @@ app.post('/api/promotions/toggle', async (req, res) => {
   }
 });
 
-// Create or Update a Promotion
-app.post('/api/promotions/create', async (req, res) => {
-  const { code, title, discount_text, expires_at } = req.body;
+// Create or Update a Promotion (Protected)
+app.post('/api/promotions/create', verifyAdminToken, async (req, res) => {
+  const { code, title, discount_text, starts_at, expires_at } = req.body;
 
   if (!code || !title || !discount_text || !expires_at) {
     return res.status(400).json({ 
       success: false, 
-      message: 'All fields (Code, Title, Discount Text, Expiration) are required.' 
+      message: 'Code, title, discount text, and expiration date are required.' 
     });
   }
 
-  try {
-    const formattedCode = code.trim().toUpperCase().replace(/\s+/g, '');
+  const formattedCode = code.trim().toUpperCase().replace(/\s+/g, '');
+  const startTime = starts_at ? new Date(starts_at).toISOString() : new Date().toISOString();
+  const expireTime = new Date(expires_at).toISOString();
 
+  try {
     await pool.query(
-      `INSERT INTO promotions (code, title, discount_text, expires_at, is_active)
-       VALUES ($1, $2, $3, $4, true)
+      `INSERT INTO promotions (code, title, discount_text, starts_at, expires_at, is_active)
+       VALUES ($1, $2, $3, $4, $5, true)
        ON CONFLICT (code) DO UPDATE 
        SET 
          title = EXCLUDED.title,
          discount_text = EXCLUDED.discount_text,
+         starts_at = EXCLUDED.starts_at,
          expires_at = EXCLUDED.expires_at,
          is_active = true`,
-      [formattedCode, title.trim(), discount_text.trim(), expires_at]
+      [formattedCode, title.trim(), discount_text.trim(), startTime, expireTime]
     );
 
     io.emit('promoStateUpdated');
 
     return res.json({ 
       success: true, 
-      message: `Promotion "${formattedCode}" created & activated successfully!` 
+      message: `Promotion "${formattedCode}" saved & activated successfully!` 
     });
   } catch (err) {
     console.error('[Add Promo Error]:', err.message);
@@ -364,8 +420,8 @@ app.post('/api/promotions/create', async (req, res) => {
   }
 });
 
-// Delete a Promotion
-app.post('/api/promotions/delete', async (req, res) => {
+// Delete a Promotion (Protected)
+app.post('/api/promotions/delete', verifyAdminToken, async (req, res) => {
   const { code } = req.body;
 
   if (!code) {
@@ -391,7 +447,11 @@ app.get('/api/wallet/google/:code', async (req, res) => {
   const code = req.params.code;
   try {
     const result = await pool.query(
-      `SELECT * FROM promotions WHERE code = $1 AND is_active = true AND expires_at > NOW()`,
+      `SELECT * FROM promotions 
+       WHERE code = $1 
+         AND is_active = true 
+         AND starts_at <= NOW() 
+         AND expires_at > NOW()`,
       [code]
     );
 
@@ -413,13 +473,11 @@ app.post('/api/redeem', async (req, res) => {
   if (!couponCode) return res.status(400).json({ success: false, message: 'Coupon code required' });
 
   try {
-    // 1. Check if coupon is active in store inventory
     const promo = await pool.query('SELECT * FROM promotions WHERE code = $1 AND is_active = true', [couponCode]);
     if (promo.rows.length === 0) {
       return res.json({ success: false, message: '❌ Invalid or Disabled Coupon' });
     }
 
-    // 2. Check if redeemed within the last 24 hours
     const cooldownCheck = await pool.query(
       `SELECT redeemed_at FROM redemptions 
        WHERE coupon_code = $1 AND redeemed_at > NOW() - INTERVAL '24 hours' 
@@ -438,7 +496,6 @@ app.post('/api/redeem', async (req, res) => {
       });
     }
 
-    // 3. Record new redemption timestamp
     await pool.query('INSERT INTO redemptions (coupon_code, redeemed_at) VALUES ($1, NOW())', [couponCode]);
 
     return res.json({
@@ -452,13 +509,12 @@ app.post('/api/redeem', async (req, res) => {
   }
 });
 
-// Coupon Status Check Endpoint (for Customer Phone Polling - 24hr check)
+// Coupon Status Check Endpoint (for Customer Phone Polling)
 app.get('/api/coupon-status', async (req, res) => {
   try {
     const { code } = req.query;
     if (!code) return res.json({ redeemed: false });
 
-    // Check for redemption in the last 24 hours
     const result = await pool.query(
       `SELECT redeemed_at FROM redemptions 
        WHERE coupon_code = $1 AND redeemed_at > NOW() - INTERVAL '24 hours' 
@@ -516,13 +572,8 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-app.post('/api/admin/add-user', async (req, res) => {
+app.post('/api/admin/add-user', verifyAdminToken, async (req, res) => {
   const { newUsername, newPassword } = req.body;
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader) {
-    return res.status(403).json({ success: false, message: 'Admin authentication required.' });
-  }
 
   if (!newUsername || !newPassword) {
     return res.status(400).json({ success: false, message: 'New username and password required.' });
@@ -545,110 +596,8 @@ app.post('/api/admin/add-user', async (req, res) => {
   }
 });
 
-// -------------------------------------------------------------
-// 1. GET /api/promotions (LIVE NOW OFFERS ONLY)
-// -------------------------------------------------------------
-app.get('/api/promotions', async (req, res) => {
-  try {
-    const result = await pool.query(
-      `SELECT * FROM promotions 
-       WHERE is_active = true 
-         AND starts_at <= NOW() 
-         AND expires_at > NOW() 
-       ORDER BY starts_at ASC`
-    );
-    res.json({ success: true, promotions: result.rows });
-  } catch (err) {
-    console.error('Error fetching active promotions:', err);
-    res.status(500).json({ success: false, message: 'Database query error.' });
-  }
-});
-
-// -------------------------------------------------------------
-// 2. GET /api/promotions/upcoming (UPCOMING OFFERS ONLY)
-// -------------------------------------------------------------
-app.get('/api/promotions/upcoming', async (req, res) => {
-  try {
-    const result = await pool.query(
-      `SELECT * FROM promotions 
-       WHERE starts_at > NOW() 
-         AND expires_at > NOW()
-       ORDER BY starts_at ASC`
-    );
-    res.json({ success: true, upcomingPromotions: result.rows });
-  } catch (err) {
-    console.error('Error fetching upcoming promotions:', err);
-    res.status(500).json({ success: false, message: 'Database query error.' });
-  }
-});
-
-// -------------------------------------------------------------
-// 3. GET /api/promotions/all (ADMIN VIEW - LIVE + UPCOMING + EXPIRED)
-// -------------------------------------------------------------
-app.get('/api/promotions/all', async (req, res) => {
-  try {
-    const result = await pool.query(
-      `SELECT *, 
-        CASE 
-          WHEN starts_at > NOW() THEN 'UPCOMING'
-          WHEN expires_at <= NOW() THEN 'EXPIRED'
-          WHEN is_active = false THEN 'DISABLED'
-          ELSE 'ACTIVE'
-        END AS status
-       FROM promotions 
-       ORDER BY created_at DESC`
-    );
-    res.json({ success: true, promotions: result.rows });
-  } catch (err) {
-    console.error('Error fetching all promotions:', err);
-    res.status(500).json({ success: false, message: 'Database query error.' });
-  }
-});
-
-// -------------------------------------------------------------
-// 4. POST /api/promotions/create (CREATE WITH START & EXPIRATION DATE)
-// -------------------------------------------------------------
-app.post('/api/promotions/create', verifyAdminToken, async (req, res) => {
-  const { code, discount_text, title, starts_at, expires_at } = req.body;
-
-  if (!code || !discount_text || !title || !expires_at) {
-    return res.status(400).json({ success: false, message: 'Code, discount text, title, and expiration date are required.' });
-  }
-
-  // Default start date to right now if not provided
-  const startTime = starts_at ? new Date(starts_at).toISOString() : new Date().toISOString();
-  const expireTime = new Date(expires_at).toISOString();
-
-  try {
-    await pool.query(
-      `INSERT INTO promotions (code, discount_text, title, starts_at, expires_at, is_active)
-       VALUES ($1, $2, $3, $4, $5, true)
-       ON CONFLICT (code) DO UPDATE 
-       SET discount_text = EXCLUDED.discount_text,
-           title = EXCLUDED.title,
-           starts_at = EXCLUDED.starts_at,
-           expires_at = EXCLUDED.expires_at,
-           is_active = true`,
-      [code.toUpperCase(), discount_text, title, startTime, expireTime]
-    );
-
-    // Notify connected cashiers and phones in real time
-    if (typeof io !== 'undefined') {
-      io.emit('promoStateUpdated');
-    }
-
-    res.json({ 
-      success: true, 
-      message: `Promotion '${code.toUpperCase()}' scheduled successfully!` 
-    });
-  } catch (err) {
-    console.error('Error creating promotion:', err);
-    res.status(500).json({ success: false, message: 'Failed to create promotion in database.' });
-  }
-});
-
 // ==============================================
-// Socket.io Real-Time Handler (Multi-Store Support)
+// Socket.io Real-Time Handler
 // ==============================================
 io.on('connection', (socket) => {
   socket.on('checkLocation', async (data) => {
@@ -676,7 +625,11 @@ io.on('connection', (socket) => {
     let availablePromos = [];
     if (isInside) {
       const result = await pool.query(
-        `SELECT * FROM promotions WHERE is_active = true AND expires_at > NOW() ORDER BY id ASC`
+        `SELECT * FROM promotions 
+         WHERE is_active = true 
+           AND starts_at <= NOW() 
+           AND expires_at > NOW() 
+         ORDER BY id ASC`
       );
       availablePromos = result.rows;
     }
