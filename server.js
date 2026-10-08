@@ -91,6 +91,7 @@ const pool = new Pool(poolConfig);
 
 async function initDb() {
   try {
+    // 1. Create tables and run schema updates
     await pool.query(`
       CREATE TABLE IF NOT EXISTS promotions (
           id SERIAL PRIMARY KEY,
@@ -118,27 +119,27 @@ async function initDb() {
           coupon_code VARCHAR(50) NOT NULL,
           redeemed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-
-      INSERT INTO promotions (code, title, discount_text, starts_at, expires_at, is_active)
-      VALUES 
-        ('SNC5OFF', '$5 Off Glassware & Water Pipes', '$5 OFF', NOW(), '2026-12-31 23:59:59', true),
-        ('CHILL20', '20% Off Vape Accessories', '20% OFF', NOW(), '2026-12-31 23:59:59', true),
-        ('SMOKE10', '10% Off Storewide Purchase', '10% OFF', NOW(), '2026-12-31 23:59:59', true)
-      ON CONFLICT (code) DO UPDATE 
-      SET 
-        title = EXCLUDED.title,
-        discount_text = EXCLUDED.discount_text,
-        expires_at = EXCLUDED.expires_at,
-        is_active = EXCLUDED.is_active;
     `);
-    console.log('[PostgreSQL] Database schema verified and migrated successfully.');
 
+    // 2. Only seed initial promos if the table has ZERO rows
+    const promoCount = await pool.query('SELECT COUNT(*) FROM promotions');
+    if (parseInt(promoCount.rows[0].count) === 0) {
+      await pool.query(`
+        INSERT INTO promotions (code, title, discount_text, starts_at, expires_at, is_active)
+        VALUES 
+          ('SNC5OFF', '$5 Off Glassware & Water Pipes', '$5 OFF', NOW(), '2026-12-31 23:59:59', true),
+          ('CHILL20', '20% Off Vape Accessories', '20% OFF', NOW(), '2026-12-31 23:59:59', true),
+          ('SMOKE10', '10% Off Storewide Purchase', '10% OFF', NOW(), '2026-12-31 23:59:59', true);
+      `);
+      console.log('[PostgreSQL] Initial default promotions seeded.');
+    }
+
+    console.log('[PostgreSQL] Database schema verified successfully.');
     await seedDefaultAdmin();
   } catch (err) {
     console.error('[PostgreSQL Migration Error]:', err.message);
   }
 }
-
 async function seedDefaultAdmin() {
   try {
     const res = await pool.query('SELECT COUNT(*) FROM users');
