@@ -368,6 +368,9 @@ app.post('/api/promotions/delete', verifyAdminToken, async (req, res) => {
 // ==============================================
 // Redemption Route (With 24-Hour Cooldown Enforcement)
 // ==============================================
+// ==============================================
+// Redemption Route (With 24-Hour Cooldown & Real-Time Broadcast)
+// ==============================================
 app.post('/api/redeem', async (req, res) => {
   const { couponCode } = req.body;
   if (!couponCode) {
@@ -408,6 +411,14 @@ app.post('/api/redeem', async (req, res) => {
 
     // 3. Record redemption timestamp
     await pool.query('INSERT INTO redemptions (coupon_code) VALUES ($1)', [code]);
+
+    const unlocksAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    // 4. Broadcast live notification event to customer phones
+    io.emit('couponRedeemed', {
+      couponCode: code,
+      unlocksAt: unlocksAt
+    });
 
     return res.json({
       success: true,
