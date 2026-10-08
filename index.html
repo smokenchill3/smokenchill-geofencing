@@ -27,7 +27,7 @@
       background-color: var(--bg-dark);
       color: var(--text-main);
       padding: 24px;
-      max-width: 800px;
+      max-width: 900px;
       margin: 0 auto;
     }
 
@@ -90,7 +90,7 @@
       line-height: 1.4;
     }
 
-    /* Deals Feed */
+    /* Deals Grid */
     .section-title {
       font-size: 1.2rem;
       font-weight: 700;
@@ -103,40 +103,74 @@
 
     .deals-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 20px;
     }
 
     .deal-card {
       background: var(--card-bg);
       border: 1px solid var(--border-color);
-      border-radius: 12px;
-      padding: 18px;
+      border-radius: 14px;
+      padding: 20px;
       text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.25);
     }
 
     .deal-badge {
       display: inline-block;
       background: rgba(0, 230, 118, 0.15);
       color: var(--accent-green);
-      font-size: 0.8rem;
+      font-size: 0.85rem;
       font-weight: 700;
-      padding: 4px 10px;
+      padding: 4px 12px;
       border-radius: 20px;
       margin-bottom: 10px;
+      border: 1px solid rgba(0, 230, 118, 0.3);
     }
 
     .deal-code {
-      font-size: 1.4rem;
+      font-size: 1.5rem;
       font-weight: 800;
       color: #fff;
       letter-spacing: 1px;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
 
     .deal-title {
       font-size: 0.9rem;
       color: var(--text-muted);
+      margin-bottom: 14px;
+    }
+
+    .qr-container {
+      background: #ffffff;
+      padding: 10px;
+      border-radius: 10px;
+      margin-bottom: 14px;
+      display: inline-block;
+    }
+
+    .qr-container img {
+      display: block;
+      width: 140px;
+      height: 140px;
+    }
+
+    .wallet-btn {
+      display: inline-block;
+      transition: transform 0.15s ease;
+    }
+
+    .wallet-btn:hover {
+      transform: scale(1.03);
+    }
+
+    .wallet-btn img {
+      height: 42px;
     }
   </style>
 </head>
@@ -218,13 +252,30 @@
           return;
         }
 
-        container.innerHTML = activePromos.map(promo => `
-          <div class="deal-card">
-            <div class="deal-badge">${promo.discount_text}</div>
-            <div class="deal-code">${promo.code}</div>
-            <div class="deal-title">${promo.title}</div>
-          </div>
-        `).join('');
+        container.innerHTML = activePromos.map(promo => {
+          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(promo.code)}&size=150x150`;
+          const walletUrl = `/api/wallet/google/${encodeURIComponent(promo.code)}`;
+
+          return `
+            <div class="deal-card">
+              <div>
+                <div class="deal-badge">${promo.discount_text}</div>
+                <div class="deal-code">${promo.code}</div>
+                <div class="deal-title">${promo.title}</div>
+              </div>
+
+              <!-- QR Code Image -->
+              <div class="qr-container">
+                <img src="${qrUrl}" alt="QR Code for ${promo.code}">
+              </div>
+
+              <!-- Add to Google Wallet Link -->
+              <a href="${walletUrl}" target="_blank" class="wallet-btn">
+                <img src="https://pay.google.com/gp/v/static/images/badges/en_US_add_to_google_wallet_wallet.svg" alt="Add to Google Wallet">
+              </a>
+            </div>
+          `;
+        }).join('');
       } catch (err) {
         console.error('Failed to fetch deals:', err);
       }
