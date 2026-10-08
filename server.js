@@ -545,6 +545,108 @@ app.post('/api/admin/add-user', async (req, res) => {
   }
 });
 
+// -------------------------------------------------------------
+// 1. GET /api/promotions (LIVE NOW OFFERS ONLY)
+// -------------------------------------------------------------
+app.get('/api/promotions', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM promotions 
+       WHERE is_active = true 
+         AND starts_at <= NOW() 
+         AND expires_at > NOW() 
+       ORDER BY starts_at ASC`
+    );
+    res.json({ success: true, promotions: result.rows });
+  } catch (err) {
+    console.error('Error fetching active promotions:', err);
+    res.status(500).json({ success: false, message: 'Database query error.' });
+  }
+});
+
+// -------------------------------------------------------------
+// 2. GET /api/promotions/upcoming (UPCOMING OFFERS ONLY)
+// -------------------------------------------------------------
+app.get('/api/promotions/upcoming', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM promotions 
+       WHERE starts_at > NOW() 
+         AND expires_at > NOW()
+       ORDER BY starts_at ASC`
+    );
+    res.json({ success: true, upcomingPromotions: result.rows });
+  } catch (err) {
+    console.error('Error fetching upcoming promotions:', err);
+    res.status(500).json({ success: false, message: 'Database query error.' });
+  }
+});
+
+// -------------------------------------------------------------
+// 3. GET /api/promotions/all (ADMIN VIEW - LIVE + UPCOMING + EXPIRED)
+// -------------------------------------------------------------
+app.get('/api/promotions/all', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT *, 
+        CASE 
+          WHEN starts_at > NOW() THEN 'UPCOMING'
+          WHEN expires_at <= NOW() THEN 'EXPIRED'
+          WHEN is_active = false THEN 'DISABLED'
+          ELSE 'ACTIVE'
+        END AS status
+       FROM promotions 
+       ORDER BY created_at DESC`
+    );
+    res.json({ success: true, promotions: result.rows });
+  } catch (err) {
+    console.error('Error fetching all promotions:', err);
+    res.status(500).json({ success: false, message: 'Database query error.' });
+  }
+});
+
+// -------------------------------------------------------------
+// 4. POST /api/promotions/create (CREATE WITH START & EXPIRATION DATE)
+// -------------------------------------------------------------
+app.post('/api/promotions/create', verifyAdminToken, async (req, res) => {
+  const { code, discount_text, title, starts_at, expires_at } = req.body;
+
+  if (!code || !discount_text || !title || !expires_at) {
+    return res.status(400).json({ success: false, message: 'Code, discount text, title, and expiration date are required.' });
+  }
+
+  // Default start date to right now if not provided
+  const startTime = starts_at ? new Date(starts_at).toISOString() : new Date().toISOString();
+  const expireTime = new Date(expires_at).toISOString();
+
+  try {
+    await pool.query(
+      `INSERT INTO promotions (code, discount_text, title, starts_at, expires_at, is_active)
+       VALUES ($1, $2, $3, $4, $5, true)
+       ON CONFLICT (code) DO UPDATE 
+       SET discount_text = EXCLUDED.discount_text,
+           title = EXCLUDED.title,
+           starts_at = EXCLUDED.starts_at,
+           expires_at = EXCLUDED.expires_at,
+           is_active = true`,
+      [code.toUpperCase(), discount_text, title, startTime, expireTime]
+    );
+
+    // Notify connected cashiers and phones in real time
+    if (typeof io !== 'undefined') {
+      io.emit('promoStateUpdated');
+    }
+
+    res.json({ 
+      success: true, 
+      message: `Promotion '${code.toUpperCase()}' scheduled successfully!` 
+    });
+  } catch (err) {
+    console.error('Error creating promotion:', err);
+    res.status(500).json({ success: false, message: 'Failed to create promotion in database.' });
+  }
+});
+
 // ==============================================
 // Socket.io Real-Time Handler (Multi-Store Support)
 // ==============================================
