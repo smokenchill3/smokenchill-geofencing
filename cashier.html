@@ -128,8 +128,18 @@
       background: #2a2e3d;
       color: #fff;
       width: auto;
-      padding: 6px 12px;
-      font-size: 0.8rem;
+      padding: 10px;
+      font-size: 0.85rem;
+      margin-top: 10px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      width: 100%;
+    }
+
+    .btn-secondary:hover {
+      background: #3a3f52;
     }
 
     .alert-status {
@@ -242,6 +252,7 @@
           <input type="text" id="couponCode" placeholder="Scan QR or enter code..." required autofocus>
         </div>
         <button type="submit" class="btn">Redeem Coupon</button>
+        <button type="button" class="btn-secondary" onclick="handleResetCooldown()">🔄 Reset 24-Hour Lock For This Code</button>
       </form>
       <div id="redeemStatus" class="alert-status"></div>
     </div>
@@ -296,8 +307,13 @@
       loadAdminAnnouncements();
     });
 
-    socket.on('promoStateUpdated', loadPromotions);
-    socket.on('announcementsUpdated', loadAdminAnnouncements);
+    socket.on('promoStateUpdated', () => {
+      loadPromotions();
+    });
+    
+    socket.on('announcementsUpdated', () => {
+      loadAdminAnnouncements();
+    });
 
     function getAuthToken() {
       return localStorage.getItem('adminToken') || '';
@@ -374,70 +390,63 @@
     }
 
     async function handleRedeem(e) {
-  e.preventDefault();
-  const input = document.getElementById('couponCode');
-  const rawValue = input.value.trim().toUpperCase();
+      e.preventDefault();
+      const input = document.getElementById('couponCode');
+      const rawValue = input.value.trim().toUpperCase();
 
-  // Split QR code payload if it contains a customer ID (FORMAT: CODE:CUSTOMER_ID)
-  let couponCode = rawValue;
-  let customerId = 'general_customer';
+      let couponCode = rawValue;
+      let customerId = 'general_customer';
 
-  if (rawValue.includes(':')) {
-    const parts = rawValue.split(':');
-    couponCode = parts[0].trim();
-    customerId = parts[1].trim().toLowerCase();
-  }
+      if (rawValue.includes(':')) {
+        const parts = rawValue.split(':');
+        couponCode = parts[0].trim();
+        customerId = parts[1].trim().toLowerCase();
+      }
 
-  try {
-    const res = await fetch('/api/redeem', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ couponCode, customerId })
-    });
-    const data = await res.json();
+      try {
+        const res = await fetch('/api/redeem', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ couponCode, customerId })
+        });
+        const data = await res.json();
 
-    showStatus('redeemStatus', data.message, data.success);
-    input.value = '';
-  } catch (err) {
-    showStatus('redeemStatus', 'Redemption failed.', false);
-  }
-}
+        showStatus('redeemStatus', data.message, data.success);
+        input.value = '';
+      } catch (err) {
+        showStatus('redeemStatus', 'Redemption failed.', false);
+      }
+    }
 
-    <button type="button" class="btn btn-secondary" onclick="handleResetCooldown()" style="margin-top: 10px;">
-  🔄 Reset 24-Hour Lock For This Code
-   </button>
+    async function handleResetCooldown() {
+      const token = getAuthToken();
+      if (!token) return alert('Admin authentication required. Log in above first.');
 
-<script>
-async function handleResetCooldown() {
-  const token = getAuthToken();
-  if (!token) return alert('Admin authentication required. Please log in above.');
+      const input = document.getElementById('couponCode');
+      let rawValue = input.value.trim().toUpperCase();
+      if (rawValue.includes(':')) {
+        rawValue = rawValue.split(':')[0];
+      }
 
-  const input = document.getElementById('couponCode');
-  let rawValue = input.value.trim().toUpperCase();
-  if (rawValue.includes(':')) {
-    rawValue = rawValue.split(':')[0];
-  }
+      if (!rawValue) return alert('Please enter or scan the coupon code to reset.');
 
-  if (!rawValue) return alert('Please enter or scan the coupon code to reset.');
+      if (!confirm(`Are you sure you want to reopen "${rawValue}" for all customers?`)) return;
 
-  if (!confirm(`Are you sure you want to reopen "${rawValue}" for all customers?`)) return;
-
-  try {
-    const res = await fetch('/api/admin/reset-cooldown', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ couponCode: rawValue })
-    });
-    const data = await res.json();
-    showStatus('redeemStatus', data.message, data.success);
-  } catch (err) {
-    showStatus('redeemStatus', 'Failed to reset coupon cooldown.', false);
-  }
-}
-</script>	
+      try {
+        const res = await fetch('/api/admin/reset-cooldown', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ couponCode: rawValue })
+        });
+        const data = await res.json();
+        showStatus('redeemStatus', data.message, data.success);
+      } catch (err) {
+        showStatus('redeemStatus', 'Failed to reset coupon cooldown.', false);
+      }
+    }
 
     async function handlePostAnnouncement(e) {
       e.preventDefault();
@@ -544,7 +553,7 @@ async function handleResetCooldown() {
               <p style="font-size:0.75rem; color:var(--text-muted);">Expires: ${expDate}</p>
             </div>
             <div style="display:flex; gap:6px;">
-              <button class="btn btn-secondary" onclick="togglePromo('${promo.code}', ${promo.is_active})">
+              <button class="btn btn-secondary" style="margin-top:0; width:auto;" onclick="togglePromo('${promo.code}', ${promo.is_active})">
                 ${promo.is_active ? 'Disable' : 'Enable'}
               </button>
               <button class="btn btn-danger" onclick="deletePromo('${promo.code}')">Delete</button>
