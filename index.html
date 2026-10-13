@@ -47,7 +47,7 @@
       font-size: 0.95rem;
     }
 
-    /* Live Toast Notification Banner */
+    /* Real-time notification banner */
     #liveNotification {
       display: none;
       position: fixed;
@@ -220,6 +220,18 @@
   <script>
     const socket = io();
 
+    // Generate or retrieve persistent unique Customer/Device ID
+    function getCustomerId() {
+      let id = localStorage.getItem('snc_customer_id');
+      if (!id) {
+        id = 'cust_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+        localStorage.setItem('snc_customer_id', id);
+      }
+      return id;
+    }
+
+    const customerId = getCustomerId();
+
     document.addEventListener('DOMContentLoaded', () => {
       loadAnnouncements();
       loadDeals();
@@ -228,13 +240,15 @@
     socket.on('announcementsUpdated', loadAnnouncements);
     socket.on('promoStateUpdated', loadDeals);
 
-    // Listen for live coupon redemption event
+    // Only update and notify if the redemption event belongs to THIS phone
     socket.on('couponRedeemed', (data) => {
-      showNotification(
-        '🎉 Coupon Redeemed!',
-        `Code "${data.couponCode}" was redeemed. 24-hour limit active.`
-      );
-      loadDeals(); // Refresh deal cards to display locked status
+      if (data.customerId === customerId) {
+        showNotification(
+          '🎉 Coupon Redeemed!',
+          `Code "${data.couponCode}" was redeemed. Locked for 24 hours on your device.`
+        );
+        loadDeals();
+      }
     });
 
     function showNotification(title, message) {
@@ -285,7 +299,7 @@
 
     async function checkCouponStatus(code) {
       try {
-        const res = await fetch(`/api/coupon-status?code=${encodeURIComponent(code)}`);
+        const res = await fetch(`/api/coupon-status?code=${encodeURIComponent(code)}&customerId=${encodeURIComponent(customerId)}`);
         return await res.json();
       } catch (err) {
         return { redeemed: false };
@@ -314,7 +328,9 @@
           const status = await checkCouponStatus(promo.code);
           const isRedeemed = status.redeemed;
 
-          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(promo.code)}&size=150x150`;
+          // Embed Customer ID into the QR string so cashier scans register THIS unique user
+          const qrPayload = `${promo.code}:${customerId}`;
+          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrPayload)}&size=150x150`;
           const walletUrl = `/api/wallet/google/${encodeURIComponent(promo.code)}`;
 
           if (isRedeemed) {

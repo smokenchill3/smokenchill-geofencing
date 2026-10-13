@@ -374,24 +374,70 @@
     }
 
     async function handleRedeem(e) {
-      e.preventDefault();
-      const input = document.getElementById('couponCode');
-      const couponCode = input.value.trim().toUpperCase();
+  e.preventDefault();
+  const input = document.getElementById('couponCode');
+  const rawValue = input.value.trim().toUpperCase();
 
-      try {
-        const res = await fetch('/api/redeem', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ couponCode })
-        });
-        const data = await res.json();
+  // Split QR code payload if it contains a customer ID (FORMAT: CODE:CUSTOMER_ID)
+  let couponCode = rawValue;
+  let customerId = 'general_customer';
 
-        showStatus('redeemStatus', data.message, data.success);
-        input.value = '';
-      } catch (err) {
-        showStatus('redeemStatus', 'Redemption failed.', false);
-      }
-    }
+  if (rawValue.includes(':')) {
+    const parts = rawValue.split(':');
+    couponCode = parts[0].trim();
+    customerId = parts[1].trim().toLowerCase();
+  }
+
+  try {
+    const res = await fetch('/api/redeem', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ couponCode, customerId })
+    });
+    const data = await res.json();
+
+    showStatus('redeemStatus', data.message, data.success);
+    input.value = '';
+  } catch (err) {
+    showStatus('redeemStatus', 'Redemption failed.', false);
+  }
+}
+
+    <button type="button" class="btn btn-secondary" onclick="handleResetCooldown()" style="margin-top: 10px;">
+  🔄 Reset 24-Hour Lock For This Code
+   </button>
+
+<script>
+async function handleResetCooldown() {
+  const token = getAuthToken();
+  if (!token) return alert('Admin authentication required. Please log in above.');
+
+  const input = document.getElementById('couponCode');
+  let rawValue = input.value.trim().toUpperCase();
+  if (rawValue.includes(':')) {
+    rawValue = rawValue.split(':')[0];
+  }
+
+  if (!rawValue) return alert('Please enter or scan the coupon code to reset.');
+
+  if (!confirm(`Are you sure you want to reopen "${rawValue}" for all customers?`)) return;
+
+  try {
+    const res = await fetch('/api/admin/reset-cooldown', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ couponCode: rawValue })
+    });
+    const data = await res.json();
+    showStatus('redeemStatus', data.message, data.success);
+  } catch (err) {
+    showStatus('redeemStatus', 'Failed to reset coupon cooldown.', false);
+  }
+}
+</script>	
 
     async function handlePostAnnouncement(e) {
       e.preventDefault();
