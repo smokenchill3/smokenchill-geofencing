@@ -375,32 +375,44 @@ app.post('/api/promotions/delete', verifyAdminToken, async (req, res) => {
 // ==============================================
 // Redemption Route (Per-Customer 24h Cooldown)
 // ==============================================
+// ==============================================
+// Redemption Route (Per-Customer 24h Cooldown)
+// ==============================================
 app.post('/api/redeem', async (req, res) => {
-  const { couponCode, customerId } = req.body;
+  let { couponCode, customerId } = req.body;
   if (!couponCode) {
     return res.status(400).json({ success: false, message: 'Coupon code required.' });
   }
 
-  const code = couponCode.trim().toUpperCase();
-  const customer = (customerId || 'general_customer').trim().toLowerCase();
+  let raw = couponCode.trim().toUpperCase();
+
+  // If the scanned string contains a colon (CODE:CUSTOMER_ID), parse both parts
+  if (raw.includes(':')) {
+    const parts = raw.split(':');
+    couponCode = parts[0].trim();
+    customerId = parts[1].trim().toLowerCase();
+  } else {
+    couponCode = raw;
+    customerId = (customerId || 'general_customer').trim().toLowerCase();
+  }
 
   try {
-    // 1. Verify promo exists, is active, and not expired
+    // 1. Check if promo exists and is active
     const promo = await pool.query(
       'SELECT * FROM promotions WHERE code = $1 AND is_active = true AND expires_at > NOW()',
-      [code]
+      [couponCode]
     );
 
     if (promo.rows.length === 0) {
       return res.status(400).json({ success: false, message: '❌ Invalid, disabled, or expired coupon code.' });
     }
 
-    // 2. Check if this customer used this coupon in the last 24 hours
+    // 2. Check if THIS specific customer redeemed THIS coupon in the last 24h
     const cooldownCheck = await pool.query(
       `SELECT redeemed_at FROM redemptions 
        WHERE coupon_code = $1 AND customer_id = $2 AND redeemed_at > NOW() - INTERVAL '24 hours' 
        ORDER BY redeemed_at DESC LIMIT 1`,
-      [code, customer]
+      [couponCode, customerId]
     );
 
     if (cooldownCheck.rows.length > 0) {
@@ -410,33 +422,33 @@ app.post('/api/redeem', async (req, res) => {
 
       return res.status(400).json({
         success: false,
-        message: `❌ Coupon already used today by customer (${customer})! Unlocks tomorrow at ${timeString}.`
+        message: `❌ Coupon already used today by customer (${customerId})! Unlocks tomorrow at ${timeString}.`
       });
     }
 
-    // 3. Record redemption timestamp and customer identifier
+    // 3. Record redemption timestamp
     await pool.query(
       'INSERT INTO redemptions (coupon_code, customer_id) VALUES ($1, $2)',
-      [code, customer]
+      [couponCode, customerId]
     );
 
     const unlocksAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-    // 4. Broadcast real-time event to customer devices
+    // 4. Emit live update event
     io.emit('couponRedeemed', {
-      couponCode: code,
-      customerId: customer,
+      couponCode: couponCode,
+      customerId: customerId,
       unlocksAt: unlocksAt
     });
 
     return res.json({
       success: true,
-      message: `✅ Coupon "${code}" redeemed successfully for customer (${customer})!`
+      message: `✅ Coupon "${couponCode}" redeemed successfully for customer (${customerId})!`
     });
 
   } catch (err) {
     console.error('Redemption error:', err);
-    res.status(500).json({ success: false, message: `Server error during redemption: ${err.message}` });
+    res.status(500).json({ success: false, message: `Server error: ${err.message}` });
   }
 });
 
@@ -506,6 +518,37 @@ app.post('/api/admin/announcements/delete', verifyAdminToken, async (req, res) =
     await pool.query('DELETE FROM announcements WHERE id = $1', [id]);
     io.emit('announcementsUpdated');
     res.json({ success: true, message: 'Announcement removed.' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ==============================================
+// Admin Route: Reset 24-Hour Cooldown for a Coupon
+// ==============================================
+// ==============================================
+// Admin Route: Reset 24-Hour Cooldown for a Specific Customer & Coupon
+// ==============================================
+app.post('/api/admin/reset-cooldown', verifyAdminToken, async (req, res) => {
+  const { couponCode, customerId } = req.body;
+  if (!couponCode) {
+    return res.status(400).json({ success: false, message: 'Coupon code required.' });
+  }
+
+  try {
+    const code = couponCode.trim().toUpperCase();
+    const customer = (customerId || 'general_customer').trim().toLowerCase();
+    
+    // Delete redemption log ONLY for this specific code and specific customer
+    const result = await pool.query(
+      "DELETE FROM redemptions WHERE coupon_code = $1 AND customer_id = $2 AND redeemed_at > NOW() - INTERVAL '24 hours'",
+      [code, customer]
+    );
+
+    res.json({
+      success: true,
+      message: `✅ Cleared lock for customer (${customer}) on "${code}". Their code is now reopened!`
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
