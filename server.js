@@ -140,7 +140,7 @@ function verifyAdminToken(req, res, next) {
 }
 
 // ==============================================
-// Database Setup & Migration
+// Database Setup & Auto-Migration
 // ==============================================
 async function initDb() {
   try {
@@ -167,6 +167,7 @@ async function initDb() {
       CREATE TABLE IF NOT EXISTS redemptions (
           id SERIAL PRIMARY KEY,
           coupon_code VARCHAR(50) NOT NULL,
+          customer_id VARCHAR(100) DEFAULT 'general_customer',
           redeemed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
@@ -178,6 +179,12 @@ async function initDb() {
           is_active BOOLEAN DEFAULT TRUE,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+    `);
+
+    // Auto-migrate: Add customer_id column if table was created previously without it
+    await pool.query(`
+      ALTER TABLE redemptions 
+      ADD COLUMN IF NOT EXISTS customer_id VARCHAR(100) DEFAULT 'general_customer';
     `);
 
     // Seed initial promos only if database is completely empty
@@ -204,7 +211,7 @@ async function initDb() {
       console.log('[PostgreSQL] Default admin user created (admin / admin123).');
     }
 
-    console.log('[PostgreSQL] Database schema verified successfully.');
+    console.log('[PostgreSQL] Database schema & migrations verified successfully.');
   } catch (err) {
     console.error('[PostgreSQL Init Error]:', err.message);
   }
@@ -366,43 +373,70 @@ app.post('/api/promotions/delete', verifyAdminToken, async (req, res) => {
 });
 
 // ==============================================
-// Redemption Route (With 24-Hour Cooldown Enforcement)
-// ==============================================
-// ==============================================
-// Redemption Route (With 24-Hour Cooldown & Real-Time Broadcast)
+// Redemption Route (Per-Customer 24h Cooldown)
 // ==============================================
 app.post('/api/redeem', async (req, res) => {
-  const { couponCode, customerId } = req.body; // Pass phone # or device token from cashier/client
+  const { couponCode, customerId } = req.body;
+  if (!couponCode) {
+    return res.status(400).json({ success: false, message: 'Coupon code required.' });
+  }
+
   const code = couponCode.trim().toUpperCase();
-  const id = (customerId || 'default_customer').trim();
+  const customer = (customerId || 'general_customer').trim().toLowerCase();
 
   try {
-    // Check if THIS specific customer redeemed THIS coupon in the last 24h
+    // 1. Verify promo exists, is active, and not expired
+    const promo = await pool.query(
+      'SELECT * FROM promotions WHERE code = $1 AND is_active = true AND expires_at > NOW()',
+      [code]
+    );
+
+    if (promo.rows.length === 0) {
+      return res.status(400).json({ success: false, message: '❌ Invalid, disabled, or expired coupon code.' });
+    }
+
+    // 2. Check if this customer used this coupon in the last 24 hours
     const cooldownCheck = await pool.query(
       `SELECT redeemed_at FROM redemptions 
-       WHERE coupon_code = $1 AND customer_id = $2 AND redeemed_at > NOW() - INTERVAL '24 hours'`,
-      [code, id]
+       WHERE coupon_code = $1 AND customer_id = $2 AND redeemed_at > NOW() - INTERVAL '24 hours' 
+       ORDER BY redeemed_at DESC LIMIT 1`,
+      [code, customer]
     );
 
     if (cooldownCheck.rows.length > 0) {
+      const lastRedeemed = new Date(cooldownCheck.rows[0].redeemed_at);
+      const nextAvailable = new Date(lastRedeemed.getTime() + 24 * 60 * 60 * 1000);
+      const timeString = nextAvailable.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
       return res.status(400).json({
         success: false,
-        message: `❌ Customer (${id}) has already used "${code}" today!`
+        message: `❌ Coupon already used today by customer (${customer})! Unlocks tomorrow at ${timeString}.`
       });
     }
 
-    // Record redemption for this specific customer
+    // 3. Record redemption timestamp and customer identifier
     await pool.query(
       'INSERT INTO redemptions (coupon_code, customer_id) VALUES ($1, $2)',
-      [code, id]
+      [code, customer]
     );
+
+    const unlocksAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    // 4. Broadcast real-time event to customer devices
+    io.emit('couponRedeemed', {
+      couponCode: code,
+      customerId: customer,
+      unlocksAt: unlocksAt
+    });
 
     return res.json({
       success: true,
-      message: `✅ Coupon "${code}" redeemed for customer (${id})!`
+      message: `✅ Coupon "${code}" redeemed successfully for customer (${customer})!`
     });
+
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('Redemption error:', err);
+    res.status(500).json({ success: false, message: `Server error during redemption: ${err.message}` });
   }
 });
 
@@ -411,14 +445,16 @@ app.post('/api/redeem', async (req, res) => {
 // ==============================================
 app.get('/api/coupon-status', async (req, res) => {
   try {
-    const { code } = req.query;
+    const { code, customerId } = req.query;
     if (!code) return res.json({ redeemed: false });
+
+    const customer = (customerId || 'general_customer').trim().toLowerCase();
 
     const result = await pool.query(
       `SELECT redeemed_at FROM redemptions 
-       WHERE coupon_code = $1 AND redeemed_at > NOW() - INTERVAL '24 hours' 
+       WHERE coupon_code = $1 AND customer_id = $2 AND redeemed_at > NOW() - INTERVAL '24 hours' 
        ORDER BY redeemed_at DESC LIMIT 1`,
-      [code.trim().toUpperCase()]
+      [code.trim().toUpperCase(), customer]
     );
 
     if (result.rows.length > 0) {
