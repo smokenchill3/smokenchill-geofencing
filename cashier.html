@@ -120,27 +120,26 @@
       background: var(--danger-red);
       color: #fff;
       width: auto;
-      padding: 6px 12px;
-      font-size: 0.8rem;
+      padding: 8px 12px;
+      font-size: 0.85rem;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 700;
     }
 
     .btn-secondary {
       background: #2a2e3d;
       color: #fff;
-      width: auto;
-      padding: 10px;
+      padding: 8px 12px;
       font-size: 0.85rem;
-      margin-top: 10px;
       border: none;
       border-radius: 6px;
       cursor: pointer;
       font-weight: 600;
-      width: 100%;
     }
 
-    .btn-secondary:hover {
-      background: #3a3f52;
-    }
+    .btn-secondary:hover { background: #3a3f52; }
 
     .alert-status {
       margin-top: 10px;
@@ -252,8 +251,15 @@
           <input type="text" id="couponCode" placeholder="Scan QR or enter code..." required autofocus>
         </div>
         <button type="submit" class="btn">Redeem Coupon</button>
-        <button type="button" class="btn-secondary" onclick="handleResetCooldown()">🔄 Reset 24-Hour Lock For This Code</button>
       </form>
+
+      <!-- Temporary Undo Last Scan Button (60s Window) -->
+      <div id="undoContainer" style="display: none; margin-top: 10px;">
+        <button type="button" class="btn-danger" style="width: 100%; padding: 12px; font-size: 0.9rem;" onclick="handleUndoScan()">
+          ↩️ Undo Last Scan (Accidental Scan)
+        </button>
+      </div>
+
       <div id="redeemStatus" class="alert-status"></div>
     </div>
 
@@ -300,6 +306,8 @@
 
   <script>
     const socket = io();
+    let lastScannedData = null;
+    let undoTimeout = null;
 
     document.addEventListener('DOMContentLoaded', () => {
       updateSessionUI();
@@ -307,13 +315,8 @@
       loadAdminAnnouncements();
     });
 
-    socket.on('promoStateUpdated', () => {
-      loadPromotions();
-    });
-    
-    socket.on('announcementsUpdated', () => {
-      loadAdminAnnouncements();
-    });
+    socket.on('promoStateUpdated', loadPromotions);
+    socket.on('announcementsUpdated', loadAdminAnnouncements);
 
     function getAuthToken() {
       return localStorage.getItem('adminToken') || '';
@@ -413,48 +416,47 @@
 
         showStatus('redeemStatus', data.message, data.success);
         input.value = '';
+
+        if (data.success) {
+          // Save last scan data and enable temporary 60s Undo button
+          lastScannedData = { couponCode, customerId };
+          document.getElementById('undoContainer').style.display = 'block';
+
+          if (undoTimeout) clearTimeout(undoTimeout);
+          undoTimeout = setTimeout(() => {
+            document.getElementById('undoContainer').style.display = 'none';
+            lastScannedData = null;
+          }, 60000);
+        }
       } catch (err) {
         showStatus('redeemStatus', 'Redemption failed.', false);
       }
     }
 
-    async function handleResetCooldown() {
-  const token = getAuthToken();
-  if (!token) return alert('Admin authentication required. Log in above first.');
+    async function handleUndoScan() {
+      if (!lastScannedData) return;
 
-  const input = document.getElementById('couponCode');
-  const rawValue = input.value.trim().toUpperCase();
-  
-  if (!rawValue) return alert('Please enter or scan the coupon code to reset.');
+      const token = getAuthToken();
+      if (!token) return alert('Admin authentication required. Please log in above.');
 
-  let couponCode = rawValue;
-  let customerId = 'general_customer';
+      try {
+        const res = await fetch('/api/admin/reset-cooldown', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(lastScannedData)
+        });
+        const data = await res.json();
 
-  // Extract specific customer ID if the QR payload has a colon
-  if (rawValue.includes(':')) {
-    const parts = rawValue.split(':');
-    couponCode = parts[0].trim();
-    customerId = parts[1].trim().toLowerCase();
-  }
-
-  if (!confirm(`Are you sure you want to unlock "${couponCode}" exclusively for customer (${customerId})?`)) return;
-
-  try {
-    const res = await fetch('/api/admin/reset-cooldown', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ couponCode, customerId })
-    });
-    const data = await res.json();
-    showStatus('redeemStatus', data.message, data.success);
-    input.value = '';
-  } catch (err) {
-    showStatus('redeemStatus', 'Failed to reset coupon cooldown.', false);
-  }
-}
+        showStatus('redeemStatus', '↩️ Scan undone! Coupon reopened for this customer.', true);
+        document.getElementById('undoContainer').style.display = 'none';
+        lastScannedData = null;
+      } catch (err) {
+        showStatus('redeemStatus', 'Failed to undo scan.', false);
+      }
+    }
 
     async function handlePostAnnouncement(e) {
       e.preventDefault();
@@ -508,7 +510,7 @@
               <span class="badge ${isEmergency ? 'badge-emergency' : 'badge-active'}">${item.type.toUpperCase()}</span>
               <p style="font-size:0.75rem; color:var(--text-muted);">${item.message}</p>
             </div>
-            <button class="btn btn-danger" onclick="deleteAnnouncement(${item.id})">Remove</button>
+            <button class="btn-danger" onclick="deleteAnnouncement(${item.id})">Remove</button>
           `;
           container.appendChild(div);
         });
@@ -561,10 +563,10 @@
               <p style="font-size:0.75rem; color:var(--text-muted);">Expires: ${expDate}</p>
             </div>
             <div style="display:flex; gap:6px;">
-              <button class="btn btn-secondary" style="margin-top:0; width:auto;" onclick="togglePromo('${promo.code}', ${promo.is_active})">
+              <button class="btn-secondary" onclick="togglePromo('${promo.code}', ${promo.is_active})">
                 ${promo.is_active ? 'Disable' : 'Enable'}
               </button>
-              <button class="btn btn-danger" onclick="deletePromo('${promo.code}')">Delete</button>
+              <button class="btn-danger" onclick="deletePromo('${promo.code}')">Delete</button>
             </div>
           `;
           container.appendChild(item);
