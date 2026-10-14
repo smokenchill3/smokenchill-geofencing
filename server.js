@@ -139,8 +139,8 @@ function verifyAdminToken(req, res, next) {
   });
 }
 
-// ==============================================
-// Database Setup & Auto-Migration
+/// ==============================================
+// Database Setup & Clean Schema
 // ==============================================
 async function initDb() {
   try {
@@ -151,7 +151,7 @@ async function initDb() {
           title VARCHAR(100) NOT NULL,
           discount_text VARCHAR(100) NOT NULL,
           starts_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          expires_at TIMESTAMP NOT NULL,
+          expires_at TIMESTAMP DEFAULT '2026-12-31 23:59:59',
           is_active BOOLEAN DEFAULT TRUE,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -179,39 +179,22 @@ async function initDb() {
           is_active BOOLEAN DEFAULT TRUE,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-    `);
 
-    // Auto-migrate: Add customer_id column if table was created previously without it
-    await pool.query(`
       ALTER TABLE redemptions 
       ADD COLUMN IF NOT EXISTS customer_id VARCHAR(100) DEFAULT 'general_customer';
     `);
 
-    // Seed initial promos only if database is completely empty
-    const promoCount = await pool.query('SELECT COUNT(*) FROM promotions');
-    if (parseInt(promoCount.rows[0].count) === 0) {
-      await pool.query(`
-        INSERT INTO promotions (code, title, discount_text, starts_at, expires_at, is_active)
-        VALUES 
-          ('SNC5OFF', '$5 Off Glassware & Water Pipes', '$5 OFF', NOW(), '2026-12-31 23:59:59', true),
-          ('CHILL20', '20% Off Vape Accessories', '20% OFF', NOW(), '2026-12-31 23:59:59', true),
-          ('SMOKE10', '10% Off Storewide Purchase', '10% OFF', NOW(), '2026-12-31 23:59:59', true);
-      `);
-      console.log('[PostgreSQL] Default promotions seeded.');
-    }
+    // Ensure your active coupons exist in the DB without overwriting deletes
+    await pool.query(`
+      INSERT INTO promotions (code, title, discount_text, expires_at, is_active)
+      VALUES 
+        ('SNC5OFF', '$5 Off Glassware & Water Pipes', '$5 OFF', '2026-12-31 23:59:59', true),
+        ('HMP10', '10% Off Any D9 Pre-rolls', '10% OFF', '2026-12-31 23:59:59', true),
+        ('GMY10', '10% Off Gummies & Edibles', '10% OFF', '2026-12-31 23:59:59', true)
+      ON CONFLICT (code) DO NOTHING;
+    `);
 
-    // Seed default admin user
-    const userCount = await pool.query('SELECT COUNT(*) FROM users');
-    if (parseInt(userCount.rows[0].count) === 0) {
-      const hashedPw = await bcrypt.hash('admin123', 10);
-      await pool.query(
-        'INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)',
-        ['admin', hashedPw, 'admin']
-      );
-      console.log('[PostgreSQL] Default admin user created (admin / admin123).');
-    }
-
-    console.log('[PostgreSQL] Database schema & migrations verified successfully.');
+    console.log('[PostgreSQL] Database schema & active promo sync completed.');
   } catch (err) {
     console.error('[PostgreSQL Init Error]:', err.message);
   }
