@@ -373,46 +373,47 @@ app.post('/api/promotions/delete', verifyAdminToken, async (req, res) => {
 });
 
 // ==============================================
-// Redemption Route (Per-Customer 24h Cooldown)
-// ==============================================
-// ==============================================
-// Redemption Route (Per-Customer 24h Cooldown)
+// Redemption Route (Clean Payload Parsing)
 // ==============================================
 app.post('/api/redeem', async (req, res) => {
-  let { couponCode, customerId } = req.body;
+  const { couponCode, customerId } = req.body;
   if (!couponCode) {
-    return res.status(400).json({ success: false, message: 'Coupon code required.' });
+    return res.status(400).json({ success: false, message: '❌ Coupon code required.' });
   }
 
-  let raw = couponCode.trim().toUpperCase();
+  let code = couponCode.trim().toUpperCase();
+  let customer = (customerId || 'general_customer').trim().toLowerCase();
 
-  // If the scanned string contains a colon (CODE:CUSTOMER_ID), parse both parts
-  if (raw.includes(':')) {
-    const parts = raw.split(':');
-    couponCode = parts[0].trim();
-    customerId = parts[1].trim().toLowerCase();
-  } else {
-    couponCode = raw;
-    customerId = (customerId || 'general_customer').trim().toLowerCase();
+  // If the scanned string contains a colon (e.g. "SNC5OFF:CUST_123"), split it
+  if (code.includes(':')) {
+    const parts = code.split(':');
+    code = parts[0].trim().toUpperCase();
+    customer = parts[1].trim().toLowerCase();
   }
 
   try {
-    // 1. Check if promo exists and is active
+    // 1. Verify if promotion exists, is enabled, and not expired
     const promo = await pool.query(
-      'SELECT * FROM promotions WHERE code = $1 AND is_active = true AND expires_at > NOW()',
-      [couponCode]
+      `SELECT * FROM promotions 
+       WHERE UPPER(TRIM(code)) = $1 
+         AND is_active = true 
+         AND expires_at > NOW()`,
+      [code]
     );
 
     if (promo.rows.length === 0) {
-      return res.status(400).json({ success: false, message: '❌ Invalid, disabled, or expired coupon code.' });
+      return res.status(400).json({ 
+        success: false, 
+        message: `❌ Invalid, disabled, or expired coupon code (${code}).` 
+      });
     }
 
-    // 2. Check if THIS specific customer redeemed THIS coupon in the last 24h
+    // 2. Check if THIS customer redeemed THIS coupon in the last 24 hours
     const cooldownCheck = await pool.query(
       `SELECT redeemed_at FROM redemptions 
-       WHERE coupon_code = $1 AND customer_id = $2 AND redeemed_at > NOW() - INTERVAL '24 hours' 
+       WHERE UPPER(TRIM(coupon_code)) = $1 AND customer_id = $2 AND redeemed_at > NOW() - INTERVAL '24 hours' 
        ORDER BY redeemed_at DESC LIMIT 1`,
-      [couponCode, customerId]
+      [code, customer]
     );
 
     if (cooldownCheck.rows.length > 0) {
@@ -422,32 +423,32 @@ app.post('/api/redeem', async (req, res) => {
 
       return res.status(400).json({
         success: false,
-        message: `❌ Coupon already used today by customer (${customerId})! Unlocks tomorrow at ${timeString}.`
+        message: `❌ Coupon already used today by customer (${customer})! Unlocks tomorrow at ${timeString}.`
       });
     }
 
-    // 3. Record redemption timestamp
+    // 3. Record redemption log
     await pool.query(
       'INSERT INTO redemptions (coupon_code, customer_id) VALUES ($1, $2)',
-      [couponCode, customerId]
+      [code, customer]
     );
 
     const unlocksAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-    // 4. Emit live update event
+    // 4. Emit WebSocket event to update customer screen live
     io.emit('couponRedeemed', {
-      couponCode: couponCode,
-      customerId: customerId,
+      couponCode: code,
+      customerId: customer,
       unlocksAt: unlocksAt
     });
 
     return res.json({
       success: true,
-      message: `✅ Coupon "${couponCode}" redeemed successfully for customer (${customerId})!`
+      message: `✅ Coupon "${code}" redeemed successfully for customer (${customer})!`
     });
 
   } catch (err) {
-    console.error('Redemption error:', err);
+    console.error('[Redeem Error]:', err);
     res.status(500).json({ success: false, message: `Server error: ${err.message}` });
   }
 });

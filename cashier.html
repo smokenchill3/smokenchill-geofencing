@@ -393,45 +393,37 @@
     }
 
     async function handleRedeem(e) {
-      e.preventDefault();
-      const input = document.getElementById('couponCode');
-      const rawValue = input.value.trim().toUpperCase();
+  e.preventDefault();
+  const input = document.getElementById('couponCode');
+  const rawValue = input.value.trim();
 
-      let couponCode = rawValue;
-      let customerId = 'general_customer';
+  if (!rawValue) return;
 
-      if (rawValue.includes(':')) {
-        const parts = rawValue.split(':');
-        couponCode = parts[0].trim();
-        customerId = parts[1].trim().toLowerCase();
-      }
+  try {
+    const res = await fetch('/api/redeem', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ couponCode: rawValue })
+    });
+    const data = await res.json();
 
-      try {
-        const res = await fetch('/api/redeem', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ couponCode, customerId })
-        });
-        const data = await res.json();
+    showStatus('redeemStatus', data.message, data.success);
+    input.value = '';
 
-        showStatus('redeemStatus', data.message, data.success);
-        input.value = '';
+    if (data.success) {
+      lastScannedData = { couponCode: rawValue };
+      document.getElementById('undoContainer').style.display = 'block';
 
-        if (data.success) {
-          // Save last scan data and enable temporary 60s Undo button
-          lastScannedData = { couponCode, customerId };
-          document.getElementById('undoContainer').style.display = 'block';
-
-          if (undoTimeout) clearTimeout(undoTimeout);
-          undoTimeout = setTimeout(() => {
-            document.getElementById('undoContainer').style.display = 'none';
-            lastScannedData = null;
-          }, 60000);
-        }
-      } catch (err) {
-        showStatus('redeemStatus', 'Redemption failed.', false);
-      }
+      if (undoTimeout) clearTimeout(undoTimeout);
+      undoTimeout = setTimeout(() => {
+        document.getElementById('undoContainer').style.display = 'none';
+        lastScannedData = null;
+      }, 60000);
     }
+  } catch (err) {
+    showStatus('redeemStatus', 'Redemption failed.', false);
+  }
+}
 
     async function handleUndoScan() {
       if (!lastScannedData) return;
