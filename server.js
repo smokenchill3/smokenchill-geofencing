@@ -232,7 +232,8 @@ app.post('/api/redeem', async (req, res) => {
   const { couponCode, customerId } = req.body;
   if (!couponCode) return res.status(400).json({ success: false, message: '❌ Coupon code required.' });
 
-  let code = couponCode.trim().toUpperCase();
+  let raw = couponCode.trim();
+  let code = raw.toUpperCase();
   let customer = (customerId || 'general_customer').trim().toLowerCase();
 
   // If payload comes in as CODE:CUSTOMER_ID, parse both parts cleanly
@@ -243,17 +244,20 @@ app.post('/api/redeem', async (req, res) => {
   }
 
   try {
-    // 1. Verify promo exists, is active, and is not expired
+    // 1. Verify promo exists in PostgreSQL, is active, and is not expired
     const promo = await pool.query(
       `SELECT * FROM promotions 
-       WHERE UPPER(TRIM(code)) = UPPER(TRIM($1)) 
+       WHERE UPPER(TRIM(code)) = $1 
          AND is_active = true 
          AND expires_at > NOW()`,
       [code]
     );
 
     if (promo.rows.length === 0) {
-      return res.status(400).json({ success: false, message: `❌ Invalid, disabled, or expired coupon code (${code}).` });
+      return res.status(400).json({ 
+        success: false, 
+        message: `❌ Invalid, disabled, or expired coupon code (${code}).` 
+      });
     }
 
     // 2. Check 24-hour per-customer cooldown
