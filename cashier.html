@@ -85,6 +85,7 @@
 
     input[type="text"],
     input[type="password"],
+    input[type="date"],
     select {
       width: 100%;
       padding: 12px 14px;
@@ -119,7 +120,6 @@
     .btn-danger {
       background: var(--danger-red);
       color: #fff;
-      width: auto;
       padding: 8px 12px;
       font-size: 0.85rem;
       border: none;
@@ -263,6 +263,33 @@
       <div id="redeemStatus" class="alert-status"></div>
     </div>
 
+    <!-- Create New Promotion -->
+    <div class="card">
+      <div class="card-title">➕ Create New Promotion</div>
+      <div class="card-subtitle">Add a new deal that automatically syncs with PostgreSQL.</div>
+      
+      <form id="createPromoForm" onsubmit="handleCreatePromo(event)">
+        <div class="form-group">
+          <label for="promoCodeInput">Promo Code</label>
+          <input type="text" id="promoCodeInput" placeholder="e.g. GLASS15" required>
+        </div>
+        <div class="form-group">
+          <label for="promoTitleInput">Offer Title / Description</label>
+          <input type="text" id="promoTitleInput" placeholder="e.g. 15% Off All Glassware" required>
+        </div>
+        <div class="form-group">
+          <label for="promoBadgeInput">Badge Text</label>
+          <input type="text" id="promoBadgeInput" placeholder="e.g. 15% OFF" required>
+        </div>
+        <div class="form-group">
+          <label for="promoExpInput">Expiration Date (Optional)</label>
+          <input type="date" id="promoExpInput">
+        </div>
+        <button type="submit" class="btn">Save & Publish Promotion</button>
+      </form>
+      <div id="createPromoStatus" class="alert-status"></div>
+    </div>
+
     <!-- Store Announcements & Emergency Notices -->
     <div class="card">
       <div class="card-title">📢 Post Store Announcement / Closure Notice</div>
@@ -271,11 +298,11 @@
       <form id="announcementForm" onsubmit="handlePostAnnouncement(event)">
         <div class="form-group">
           <label for="annTitle">Title</label>
-          <input type="text" id="annTitle" placeholder="e.g. Store Closed Due to Weather or Winter Sale Coming!" required>
+          <input type="text" id="annTitle" placeholder="e.g. Winter Sale Coming!" required>
         </div>
         <div class="form-group">
           <label for="annMessage">Message</label>
-          <input type="text" id="annMessage" placeholder="e.g. We will remain closed today for safety..." required>
+          <input type="text" id="annMessage" placeholder="e.g. Enjoy 20% off all liquid items today..." required>
         </div>
         <div class="form-group">
           <label for="annType">Notice Type</label>
@@ -298,7 +325,7 @@
     <!-- Store Inventory Controls -->
     <div class="card">
       <div class="card-title">📦 Store Inventory Controls</div>
-      <div class="card-subtitle">Toggle stock state or delete promotions.</div>
+      <div class="card-subtitle">Toggle stock state or delete promotions from PostgreSQL.</div>
       
       <div id="promoList" class="item-list"></div>
     </div>
@@ -393,43 +420,43 @@
     }
 
     async function handleRedeem(e) {
-  e.preventDefault();
-  const input = document.getElementById('couponCode');
-  const rawValue = input.value.trim();
+      e.preventDefault();
+      const input = document.getElementById('couponCode');
+      const rawValue = input.value.trim();
 
-  if (!rawValue) return;
+      if (!rawValue) return;
 
-  try {
-    const res = await fetch('/api/redeem', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ couponCode: rawValue })
-    });
-    const data = await res.json();
+      try {
+        const res = await fetch('/api/redeem', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ couponCode: rawValue })
+        });
+        const data = await res.json();
 
-    showStatus('redeemStatus', data.message, data.success);
-    input.value = '';
+        showStatus('redeemStatus', data.message, data.success);
+        input.value = '';
 
-    if (data.success) {
-      lastScannedData = { couponCode: rawValue };
-      document.getElementById('undoContainer').style.display = 'block';
+        if (data.success) {
+          lastScannedData = { couponCode: rawValue };
+          document.getElementById('undoContainer').style.display = 'block';
 
-      if (undoTimeout) clearTimeout(undoTimeout);
-      undoTimeout = setTimeout(() => {
-        document.getElementById('undoContainer').style.display = 'none';
-        lastScannedData = null;
-      }, 60000);
+          if (undoTimeout) clearTimeout(undoTimeout);
+          undoTimeout = setTimeout(() => {
+            document.getElementById('undoContainer').style.display = 'none';
+            lastScannedData = null;
+          }, 60000);
+        }
+      } catch (err) {
+        showStatus('redeemStatus', 'Redemption failed.', false);
+      }
     }
-  } catch (err) {
-    showStatus('redeemStatus', 'Redemption failed.', false);
-  }
-}
 
     async function handleUndoScan() {
       if (!lastScannedData) return;
 
       const token = getAuthToken();
-      if (!token) return alert('Admin authentication required. Please log in above.');
+      if (!token) return alert('Admin authentication required. Log in above.');
 
       try {
         const res = await fetch('/api/admin/reset-cooldown', {
@@ -447,6 +474,40 @@
         lastScannedData = null;
       } catch (err) {
         showStatus('redeemStatus', 'Failed to undo scan.', false);
+      }
+    }
+
+    async function handleCreatePromo(e) {
+      e.preventDefault();
+      const token = getAuthToken();
+      if (!token) return showStatus('createPromoStatus', 'Admin login required.', false);
+
+      const code = document.getElementById('promoCodeInput').value;
+      const title = document.getElementById('promoTitleInput').value;
+      const discountText = document.getElementById('promoBadgeInput').value;
+      const expVal = document.getElementById('promoExpInput').value;
+      
+      const expiresAt = expVal ? `${expVal} 23:59:59` : '2026-12-31 23:59:59';
+
+      try {
+        const res = await fetch('/api/admin/promotions/create', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ code, title, discountText, expiresAt })
+        });
+
+        const data = await res.json();
+        showStatus('createPromoStatus', data.message, data.success);
+
+        if (data.success) {
+          document.getElementById('createPromoForm').reset();
+          loadPromotions();
+        }
+      } catch (err) {
+        showStatus('createPromoStatus', 'Failed to save promotion to database.', false);
       }
     }
 
