@@ -307,7 +307,9 @@ app.post('/api/admin/reset-cooldown', verifyAdminToken, async (req, res) => {
       [code, customer]
     );
 
+    // ⚡ THIS IS THE FIX: Tell all connected customer phones to refresh their offer status live!
     io.emit('promoStateUpdated');
+
     res.json({ success: true, message: `✅ Cleared lock for customer (${customer}) on "${code}". Coupon reopened!` });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
