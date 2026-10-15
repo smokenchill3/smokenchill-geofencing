@@ -195,11 +195,16 @@
   </style>
 </head>
 <body>
-
-  <div class="header">
-    <h1>Smoke N Chill — Cashier & Admin Portal</h1>
-    <div id="sessionStatus" style="font-size: 0.85rem; color: var(--text-muted);">Status: Guest Mode</div>
+  
+   <div class="header">
+   <h1>Smoke N Chill — Cashier & Admin Portal</h1>
+   <div style="display: flex; align-items: center; gap: 12px;">
+   <div id="sessionStatus" style="font-size: 0.85rem; color: var(--text-muted);">Status: Guest Mode</div>
+   <button id="logoutBtn" class="btn-danger" style="display: none; padding: 6px 12px; font-size: 0.8rem;"    onclick="handleLogout()">
+   🚪 Log Out
+   </button>
   </div>
+</div>
 
   <div class="grid">
     <!-- Admin Login -->
@@ -349,16 +354,31 @@
       return localStorage.getItem('adminToken') || '';
     }
 
-    function updateSessionUI() {
-      const token = getAuthToken();
-      const statusEl = document.getElementById('sessionStatus');
-      if (token) {
-        statusEl.textContent = 'Status: Logged in as Admin';
-        statusEl.style.color = 'var(--accent-green)';
-      } else {
-        statusEl.textContent = 'Status: Guest Mode (Authentication Required)';
-        statusEl.style.color = 'var(--text-muted)';
-      }
+  function updateSessionUI() {
+  const token = getAuthToken();
+  const statusEl = document.getElementById('sessionStatus');
+  const logoutBtn = document.getElementById('logoutBtn');
+
+  if (token) {
+    statusEl.textContent = 'Status: Logged in as Admin';
+    statusEl.style.color = 'var(--accent-green)';
+    if (logoutBtn) logoutBtn.style.display = 'inline-block';
+  } else {
+    statusEl.textContent = 'Status: Guest Mode (Authentication Required)';
+    statusEl.style.color = 'var(--text-muted)';
+    if (logoutBtn) logoutBtn.style.display = 'none';
+   }
+ }
+
+  function handleLogout() {
+    // Clear stored JWT token
+    localStorage.removeItem('adminToken');
+  
+    // Clear any status messages
+    showStatus('loginStatus', 'Logged out successfully.', true);
+  
+     // Refresh header UI status
+     updateSessionUI();
     }
 
     function showStatus(elementId, message, isSuccess) {
