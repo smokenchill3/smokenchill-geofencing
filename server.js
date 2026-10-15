@@ -351,6 +351,15 @@ app.post('/api/admin/announcements/delete', verifyAdminToken, async (req, res) =
   }
 });
 
+// Explicit routes to serve your HTML files from the root directory
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.get('/cashier.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'cashier.html'));
+});
+
 server.listen(PORT, () => {
   console.log(`🚀 Smoke N Chill Server running on port ${PORT}`);
 });
