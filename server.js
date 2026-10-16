@@ -22,6 +22,15 @@ const pool = new Pool({
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Explicit File Routing
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.get('/cashier.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'cashier.html'));
+});
+
 // ==============================================
 // Database Schema Initialization
 // ==============================================
@@ -199,6 +208,46 @@ app.post('/api/promotions/delete', verifyAdminToken, async (req, res) => {
 });
 
 // ==============================================
+// Google Wallet Route (Pass Placeholder Notice)
+// ==============================================
+app.get('/api/wallet/google/:code', async (req, res) => {
+  const promoCode = req.params.code.toUpperCase();
+  try {
+    const promo = await pool.query('SELECT * FROM promotions WHERE code = $1', [promoCode]);
+    if (promo.rows.length === 0) {
+      return res.status(404).send('Promotion not found.');
+    }
+
+    res.send(`
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Google Wallet - Smoke N Chill</title>
+        <style>
+          body { background: #0b0d12; color: #fff; font-family: sans-serif; text-align: center; padding: 50px 20px; }
+          .card { background: #181b24; border: 1px solid #2a2e3d; padding: 30px; border-radius: 12px; display: inline-block; max-width: 400px; width: 100%; }
+          h2 { color: #00e676; margin-bottom: 10px; }
+          p { color: #94a3b8; font-size: 0.95rem; margin-bottom: 24px; line-height: 1.5; }
+          a { background: #00e676; color: #000; padding: 12px 24px; text-decoration: none; font-weight: bold; border-radius: 6px; display: inline-block; text-transform: uppercase; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <h2>Smoke N Chill Offer</h2>
+          <p>Pass integration for <strong>${promoCode}</strong> is active. Present your live QR code directly at the counter for instant scanning!</p>
+          <a href="/">Back to Store Offers</a>
+        </div>
+      </body>
+      </html>
+    `);
+  } catch (err) {
+    res.status(500).send('Server error.');
+  }
+});
+
+// ==============================================
 // Redemption & Cooldown Logic
 // ==============================================
 app.get('/api/coupon-status', async (req, res) => {
@@ -232,11 +281,9 @@ app.post('/api/redeem', async (req, res) => {
   const { couponCode, customerId } = req.body;
   if (!couponCode) return res.status(400).json({ success: false, message: '❌ Coupon code required.' });
 
-  let raw = couponCode.trim();
-  let code = raw.toUpperCase();
+  let code = couponCode.trim().toUpperCase();
   let customer = (customerId || 'general_customer').trim().toLowerCase();
 
-  // If payload comes in as CODE:CUSTOMER_ID, parse both parts cleanly
   if (code.includes(':')) {
     const parts = code.split(':');
     code = parts[0].trim().toUpperCase();
@@ -244,23 +291,18 @@ app.post('/api/redeem', async (req, res) => {
   }
 
   try {
-    // 1. Verify promo exists in PostgreSQL, is active, and is not expired
     const promo = await pool.query(
       `SELECT * FROM promotions 
-       WHERE UPPER(TRIM(code)) = $1 
+       WHERE UPPER(TRIM(code)) = UPPER(TRIM($1)) 
          AND is_active = true 
          AND expires_at > NOW()`,
       [code]
     );
 
     if (promo.rows.length === 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `❌ Invalid, disabled, or expired coupon code (${code}).` 
-      });
+      return res.status(400).json({ success: false, message: `❌ Invalid, disabled, or expired coupon code (${code}).` });
     }
 
-    // 2. Check 24-hour per-customer cooldown
     const cooldownCheck = await pool.query(
       `SELECT redeemed_at FROM redemptions 
        WHERE UPPER(TRIM(coupon_code)) = $1 AND customer_id = $2 AND redeemed_at > NOW() - INTERVAL '24 hours' 
@@ -279,11 +321,9 @@ app.post('/api/redeem', async (req, res) => {
       });
     }
 
-    // 3. Log redemption
     await pool.query('INSERT INTO redemptions (coupon_code, customer_id) VALUES ($1, $2)', [code, customer]);
     const unlocksAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-    // 4. Notify live customer screen via WebSocket
     io.emit('couponRedeemed', { couponCode: code, customerId: customer, unlocksAt });
 
     res.json({ success: true, message: `✅ Coupon "${code}" redeemed successfully for customer (${customer})!` });
@@ -306,14 +346,12 @@ app.post('/api/admin/reset-cooldown', verifyAdminToken, async (req, res) => {
   }
 
   try {
-    const result = await pool.query(
+    await pool.query(
       "DELETE FROM redemptions WHERE UPPER(TRIM(coupon_code)) = $1 AND customer_id = $2 AND redeemed_at > NOW() - INTERVAL '24 hours'",
       [code, customer]
     );
 
-    // ⚡ THIS IS THE FIX: Tell all connected customer phones to refresh their offer status live!
     io.emit('promoStateUpdated');
-
     res.json({ success: true, message: `✅ Cleared lock for customer (${customer}) on "${code}". Coupon reopened!` });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -355,15 +393,6 @@ app.post('/api/admin/announcements/delete', verifyAdminToken, async (req, res) =
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
-});
-
-// Explicit routes to serve your HTML files from the root directory
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-app.get('/cashier.html', (req, res) => {
-  res.sendFile(path.join(__dirname, 'cashier.html'));
 });
 
 server.listen(PORT, () => {

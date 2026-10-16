@@ -47,7 +47,6 @@
       font-size: 0.95rem;
     }
 
-    /* Live Toast Notification Banner */
     #liveNotification {
       display: none;
       position: fixed;
@@ -132,7 +131,6 @@
       transition: all 0.3s ease;
     }
 
-    /* Anti-cheat locked state */
     .deal-card.locked {
       opacity: 0.5;
       border-color: rgba(255, 82, 82, 0.4);
@@ -191,25 +189,24 @@
     }
 
     .wallet-btn {
-  display: inline-block;
-  transition: transform 0.2s ease, opacity 0.2s ease;
-  text-decoration: none;
-}
+      display: inline-block;
+      transition: transform 0.2s ease, opacity 0.2s ease;
+      text-decoration: none;
+    }
 
-.wallet-btn:hover {
-  transform: scale(1.05);
-  opacity: 0.9;
-}
+    .wallet-btn:hover {
+      transform: scale(1.05);
+      opacity: 0.9;
+    }
 
-.wallet-btn img {
-  height: 42px;
-  width: auto;
-}
+    .wallet-btn img {
+      height: 42px;
+      width: auto;
+    }
   </style>
 </head>
 <body>
 
-  <!-- Real-Time Notification Banner for Customer -->
   <div id="liveNotification">
     <strong id="notifTitle" style="font-size: 1.1rem; color: var(--accent-green);">Notice</strong>
     <p id="notifBody" style="font-size: 0.9rem; margin-top: 4px; color: #cbd5e1;"></p>
@@ -220,17 +217,14 @@
     <p>Live Store Updates & Customer Promotions</p>
   </header>
 
-  <!-- Emergency Notices & Newsletters -->
   <div id="customerAnnouncements" class="announcements-container"></div>
 
-  <!-- Active Store Deals -->
   <div class="section-title">🏷️ Active Store Offers</div>
   <div id="customerDeals" class="deals-grid"></div>
 
   <script>
     const socket = io();
 
-    // Generate or retrieve persistent unique Customer/Device ID
     function getCustomerId() {
       let id = localStorage.getItem('snc_customer_id');
       if (!id) {
@@ -250,7 +244,6 @@
     socket.on('announcementsUpdated', loadAnnouncements);
     socket.on('promoStateUpdated', loadDeals);
 
-    // Only notify and update if redemption event belongs to THIS device
     socket.on('couponRedeemed', (data) => {
       if (data.customerId === customerId) {
         showNotification(
@@ -317,81 +310,79 @@
     }
 
     async function loadDeals() {
-  try {
-    const res = await fetch('/api/promotions/all');
-    const data = await res.json();
-    const container = document.getElementById('customerDeals');
+      try {
+        const res = await fetch('/api/promotions/all');
+        const data = await res.json();
+        const container = document.getElementById('customerDeals');
 
-    if (!data.success || data.promotions.length === 0) {
-      container.innerHTML = '<p style="color:var(--text-muted);">No active offers at this time.</p>';
-      return;
-    }
+        if (!data.success || data.promotions.length === 0) {
+          container.innerHTML = '<p style="color:var(--text-muted);">No active offers at this time.</p>';
+          return;
+        }
 
-    const activePromos = data.promotions.filter(p => p.is_active);
+        const activePromos = data.promotions.filter(p => p.is_active);
 
-    if (activePromos.length === 0) {
-      container.innerHTML = '<p style="color:var(--text-muted);">No active offers at this time.</p>';
-      return;
-    }
+        if (activePromos.length === 0) {
+          container.innerHTML = '<p style="color:var(--text-muted);">No active offers at this time.</p>';
+          return;
+        }
 
-    const cardsHtml = await Promise.all(activePromos.map(async (promo) => {
-      const status = await checkCouponStatus(promo.code);
-      const isRedeemed = status.redeemed;
+        const cardsHtml = await Promise.all(activePromos.map(async (promo) => {
+          const status = await checkCouponStatus(promo.code);
+          const isRedeemed = status.redeemed;
 
-      // Embed Customer ID into QR string (FORMAT: CODE:CUSTOMER_ID)
-      const qrPayload = `${promo.code}:${customerId}`;
-      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrPayload)}&size=150x150`;
-      const walletUrl = `/api/wallet/google/${encodeURIComponent(promo.code)}`;
+          const qrPayload = `${promo.code}:${customerId}`;
+          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrPayload)}&size=150x150`;
+          const walletUrl = `/api/wallet/google/${encodeURIComponent(promo.code)}`;
 
-      if (isRedeemed) {
-        const unlockTime = new Date(status.unlocks_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          if (isRedeemed) {
+            const unlockTime = new Date(status.unlocks_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-        return `
-          <div class="deal-card locked">
-            <div>
-              <div class="deal-badge badge-locked">🔒 REDEEMED TODAY</div>
-              <div class="deal-code">${promo.code}</div>
-              <div class="deal-title" style="color: var(--danger-red);">Unlocks tomorrow at ${unlockTime}</div>
+            return `
+              <div class="deal-card locked">
+                <div>
+                  <div class="deal-badge badge-locked">🔒 REDEEMED TODAY</div>
+                  <div class="deal-code">${promo.code}</div>
+                  <div class="deal-title" style="color: var(--danger-red);">Unlocks tomorrow at ${unlockTime}</div>
+                </div>
+
+                <div class="qr-container">
+                  <img src="${qrUrl}" alt="QR Code for ${promo.code}">
+                </div>
+
+                <p style="font-size: 0.75rem; color: var(--text-muted);">1 redemption allowed per 24 hours.</p>
+              </div>
+            `;
+          }
+
+          return `
+            <div class="deal-card">
+              <div>
+                <div class="deal-badge">${promo.discount_text}</div>
+                <div class="deal-code">${promo.code}</div>
+                <div class="deal-title">${promo.title}</div>
+              </div>
+
+              <div class="qr-container">
+                <img src="${qrUrl}" alt="QR Code for ${promo.code}">
+              </div>
+
+              <div style="margin-top: 10px;">
+                <a href="${walletUrl}" target="_blank" class="wallet-btn" title="Add ${promo.code} to Google Wallet">
+                  <img src="https://developers.google.com/pay/passes/images/badges/en_us/addtorewards-en.svg" 
+                       alt="Add to Google Wallet" 
+                       style="height: 42px; width: auto; display: block; margin: 0 auto;">
+                </a>
+              </div>
             </div>
+          `;
+        }));
 
-            <div class="qr-container">
-              <img src="${qrUrl}" alt="QR Code for ${promo.code}">
-            </div>
-
-            <p style="font-size: 0.75rem; color: var(--text-muted);">1 redemption allowed per 24 hours.</p>
-          </div>
-        `;
+        container.innerHTML = cardsHtml.join('');
+      } catch (err) {
+        console.error('Failed to fetch deals:', err);
       }
-
-      return `
-        <div class="deal-card">
-          <div>
-            <div class="deal-badge">${promo.discount_text}</div>
-            <div class="deal-code">${promo.code}</div>
-            <div class="deal-title">${promo.title}</div>
-          </div>
-
-          <div class="qr-container">
-            <img src="${qrUrl}" alt="QR Code for ${promo.code}">
-          </div>
-
-          <!-- Google Wallet Button with Fallback Badge Image -->
-          <div style="margin-top: 10px;">
-            <a href="${walletUrl}" target="_blank" class="wallet-btn" title="Add ${promo.code} to Google Wallet">
-              <img src="https://raw.githubusercontent.com/google-wallet/assets/main/badges/en_US/black.svg" 
-                   alt="Add to Google Wallet" 
-                   style="height: 42px; width: auto; display: block; margin: 0 auto;"
-                   onerror="this.onerror=null; this.src='https://pay.google.com/gp/v/static/images/badges/en_US_add_to_google_wallet_wallet.svg';">
-            </a>
-          </div>
-        </div>
-      `;
-    }));
-
-    container.innerHTML = cardsHtml.join('');
-  } catch (err) {
-    console.error('Failed to fetch deals:', err);
-  }
-}  </script>
+    }
+  </script>
 </body>
 </html>
