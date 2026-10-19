@@ -241,6 +241,7 @@ app.get('/api/wallet/google/:code', async (req, res) => {
           {
             id: classId,
             issuerName: 'Smoke N Chill',
+	    offerProvider: 'Smoke N Chill', 
             title: offer.title,
             reviewStatus: 'UNDER_REVIEW'
           }
