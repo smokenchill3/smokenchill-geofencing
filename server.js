@@ -230,7 +230,7 @@ app.get('/api/wallet/google/:code', async (req, res) => {
     const serviceAccount = JSON.parse(process.env.SERVICE_ACCOUNT_JSON);
 
     // 3. Set your Google Wallet Issuer ID (Replace with your actual 12-digit Issuer ID if different)
-    const issuerId = process.env.GOOGLE_ISSUER_ID || '3388000000022233344'; 
+    const issuerId = process.env.GOOGLE_ISSUER_ID || '3388000000023201282'; 
     const classId = `${issuerId}.smokenchill_${promoCode.toLowerCase()}`;
     const objectId = `${issuerId}.pass_${promoCode.toLowerCase()}_${Date.now()}`;
 
