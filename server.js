@@ -208,13 +208,12 @@ app.post('/api/promotions/delete', verifyAdminToken, async (req, res) => {
 });
 
 // ==============================================
-// Google Wallet API Integration (Live Pass Generator)
+// Google Wallet API Integration
 // ==============================================
 app.get('/api/wallet/google/:code', async (req, res) => {
   const promoCode = req.params.code.toUpperCase();
 
   try {
-    // 1. Fetch promo details from PostgreSQL
     const promo = await pool.query('SELECT * FROM promotions WHERE code = $1 AND is_active = true', [promoCode]);
     if (promo.rows.length === 0) {
       return res.status(404).send('Promotion not found or inactive.');
@@ -222,19 +221,15 @@ app.get('/api/wallet/google/:code', async (req, res) => {
 
     const offer = promo.rows[0];
 
-    // 2. Load Google Credentials from Render Environment Variable
     if (!process.env.SERVICE_ACCOUNT_JSON) {
       return res.status(500).send('Server configuration error: SERVICE_ACCOUNT_JSON environment variable is missing.');
     }
 
     const serviceAccount = JSON.parse(process.env.SERVICE_ACCOUNT_JSON);
-
-    // 3. Set your Google Wallet Issuer ID (Replace with your actual 12-digit Issuer ID if different)
-    const issuerId = process.env.GOOGLE_ISSUER_ID || '3388000000023201282'; 
+    const issuerId = process.env.GOOGLE_ISSUER_ID || '3388000000023201282';
     const classId = `${issuerId}.smokenchill_${promoCode.toLowerCase()}`;
     const objectId = `${issuerId}.pass_${promoCode.toLowerCase()}_${Date.now()}`;
 
-    // 4. Construct Google Wallet Pass Object Payload
     const passPayload = {
       iss: serviceAccount.client_email,
       aud: 'google',
@@ -268,26 +263,10 @@ app.get('/api/wallet/google/:code', async (req, res) => {
       }
     };
 
-    // 5. Sign JWT using Service Account Private Key
     const token = jwt.sign(passPayload, serviceAccount.private_key, { algorithm: 'RS256' });
     const googleSaveUrl = `https://pay.google.com/gp/v/save/${token}`;
 
-    // 6. Redirect customer directly to Google Wallet App save screen
     res.redirect(googleSaveUrl);
-
-  } catch (err) {
-    console.error('[Google Wallet Error]:', err);
-    res.status(500).send(`Failed to generate Google Wallet Pass: ${err.message}`);
-  }
-});
-
-    // 4. Sign JWT using Service Account Private Key
-    const token = jwt.sign(passPayload, serviceAccount.private_key, { algorithm: 'RS256' });
-    const googleSaveUrl = `https://pay.google.com/gp/v/save/${token}`;
-
-    // 5. Redirect customer directly to Google Wallet App save screen
-    res.redirect(googleSaveUrl);
-
   } catch (err) {
     console.error('[Google Wallet Error]:', err);
     res.status(500).send(`Failed to generate Google Wallet Pass: ${err.message}`);
