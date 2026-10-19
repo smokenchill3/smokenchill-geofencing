@@ -208,42 +208,73 @@ app.post('/api/promotions/delete', verifyAdminToken, async (req, res) => {
 });
 
 // ==============================================
-// Google Wallet Route (Pass Placeholder Notice)
+// Google Wallet API Integration (Live Pass Generator)
 // ==============================================
 app.get('/api/wallet/google/:code', async (req, res) => {
   const promoCode = req.params.code.toUpperCase();
+
   try {
-    const promo = await pool.query('SELECT * FROM promotions WHERE code = $1', [promoCode]);
+    // 1. Fetch promo details from PostgreSQL
+    const promo = await pool.query('SELECT * FROM promotions WHERE code = $1 AND is_active = true', [promoCode]);
     if (promo.rows.length === 0) {
-      return res.status(404).send('Promotion not found.');
+      return res.status(404).send('Promotion not found or inactive.');
     }
 
-    res.send(`
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Google Wallet - Smoke N Chill</title>
-        <style>
-          body { background: #0b0d12; color: #fff; font-family: sans-serif; text-align: center; padding: 50px 20px; }
-          .card { background: #181b24; border: 1px solid #2a2e3d; padding: 30px; border-radius: 12px; display: inline-block; max-width: 400px; width: 100%; }
-          h2 { color: #00e676; margin-bottom: 10px; }
-          p { color: #94a3b8; font-size: 0.95rem; margin-bottom: 24px; line-height: 1.5; }
-          a { background: #00e676; color: #000; padding: 12px 24px; text-decoration: none; font-weight: bold; border-radius: 6px; display: inline-block; text-transform: uppercase; }
-        </style>
-      </head>
-      <body>
-        <div class="card">
-          <h2>Smoke N Chill Offer</h2>
-          <p>Pass integration for <strong>${promoCode}</strong> is active. Present your live QR code directly at the counter for instant scanning!</p>
-          <a href="/">Back to Store Offers</a>
-        </div>
-      </body>
-      </html>
-    `);
+    const offer = promo.rows[0];
+
+    // 2. Load Google Credentials (Environment variables or service-account.json)
+    const serviceAccount = process.env.GOOGLE_SERVICE_ACCOUNT 
+      ? JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT)
+      : require('./service-account.json');
+
+    const issuerId = process.env.GOOGLE_ISSUER_ID || serviceAccount.issuer_id || '3388000000022233344'; // Your Issuer ID
+    const classId = `${issuerId}.smokenchill_${promoCode.toLowerCase()}`;
+    const objectId = `${issuerId}.pass_${promoCode.toLowerCase()}_${Date.now()}`;
+
+    // 3. Construct Google Wallet Pass Object Payload
+    const passPayload = {
+      iss: serviceAccount.client_email,
+      aud: 'google',
+      origins: ['https://smokenchill-geofencing.onrender.com'],
+      typ: 'savetowallet',
+      payload: {
+        offerObjects: [
+          {
+            id: objectId,
+            classId: classId,
+            state: 'ACTIVE',
+            barcode: {
+              type: 'QR_CODE',
+              value: offer.code,
+              alternateText: offer.code
+            },
+            title: offer.title,
+            header: offer.discount_text,
+            textModulesData: [
+              {
+                header: 'Store Location',
+                body: 'Smoke N Chill — Austin, TX'
+              },
+              {
+                header: 'Terms',
+                body: '1 redemption per customer every 24 hours.'
+              }
+            ]
+          }
+        ]
+      }
+    };
+
+    // 4. Sign JWT using Service Account Private Key
+    const token = jwt.sign(passPayload, serviceAccount.private_key, { algorithm: 'RS256' });
+    const googleSaveUrl = `https://pay.google.com/gp/v/save/${token}`;
+
+    // 5. Redirect customer directly to Google Wallet App save screen
+    res.redirect(googleSaveUrl);
+
   } catch (err) {
-    res.status(500).send('Server error.');
+    console.error('[Google Wallet Error]:', err);
+    res.status(500).send(`Failed to generate Google Wallet Pass: ${err.message}`);
   }
 });
 
