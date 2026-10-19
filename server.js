@@ -241,7 +241,7 @@ app.get('/api/wallet/google/:code', async (req, res) => {
           {
             id: classId,
             issuerName: 'Smoke N Chill',
-            offerProvider: 'Smoke N Chill', // 👈 Required by Google Wallet OfferClass schema
+            provider: 'Smoke N Chill', // 👈 Google Wallet API expects 'provider' here
             title: offer.title,
             reviewStatus: 'UNDER_REVIEW'
           }
