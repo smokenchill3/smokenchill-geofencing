@@ -208,7 +208,7 @@ app.post('/api/promotions/delete', verifyAdminToken, async (req, res) => {
 });
 
 // ==============================================
-// Google Wallet API Integration
+// Google Wallet API Integration (Auto-Creates Class & Object)
 // ==============================================
 app.get('/api/wallet/google/:code', async (req, res) => {
   const promoCode = req.params.code.toUpperCase();
@@ -230,12 +230,21 @@ app.get('/api/wallet/google/:code', async (req, res) => {
     const classId = `${issuerId}.smokenchill_${promoCode.toLowerCase()}`;
     const objectId = `${issuerId}.pass_${promoCode.toLowerCase()}_${Date.now()}`;
 
+    // Construct Pass Payload with both Class and Object definition
     const passPayload = {
       iss: serviceAccount.client_email,
       aud: 'google',
       origins: ['https://smokenchill-geofencing.onrender.com'],
       typ: 'savetowallet',
       payload: {
+        offerClasses: [
+          {
+            id: classId,
+            issuerName: 'Smoke N Chill',
+            title: offer.title,
+            reviewStatus: 'UNDER_REVIEW'
+          }
+        ],
         offerObjects: [
           {
             id: objectId,
