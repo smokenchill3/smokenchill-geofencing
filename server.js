@@ -222,16 +222,19 @@ app.get('/api/wallet/google/:code', async (req, res) => {
 
     const offer = promo.rows[0];
 
-    // 2. Load Google Credentials (Environment variables or service-account.json)
-    const serviceAccount = process.env.GOOGLE_SERVICE_ACCOUNT 
-      ? JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT)
-      : require('./service-account.json');
+    // 2. Load Google Credentials from Render Environment Variable
+    if (!process.env.SERVICE_ACCOUNT_JSON) {
+      return res.status(500).send('Server configuration error: SERVICE_ACCOUNT_JSON environment variable is missing.');
+    }
 
-    const issuerId = process.env.GOOGLE_ISSUER_ID || serviceAccount.issuer_id || '3388000000022233344'; // Your Issuer ID
+    const serviceAccount = JSON.parse(process.env.SERVICE_ACCOUNT_JSON);
+
+    // 3. Set your Google Wallet Issuer ID (Replace with your actual 12-digit Issuer ID if different)
+    const issuerId = process.env.GOOGLE_ISSUER_ID || '3388000000022233344'; 
     const classId = `${issuerId}.smokenchill_${promoCode.toLowerCase()}`;
     const objectId = `${issuerId}.pass_${promoCode.toLowerCase()}_${Date.now()}`;
 
-    // 3. Construct Google Wallet Pass Object Payload
+    // 4. Construct Google Wallet Pass Object Payload
     const passPayload = {
       iss: serviceAccount.client_email,
       aud: 'google',
@@ -245,7 +248,7 @@ app.get('/api/wallet/google/:code', async (req, res) => {
             state: 'ACTIVE',
             barcode: {
               type: 'QR_CODE',
-              value: offer.code,
+              value: `${offer.code}:${req.query.customerId || 'general_customer'}`,
               alternateText: offer.code
             },
             title: offer.title,
@@ -264,6 +267,19 @@ app.get('/api/wallet/google/:code', async (req, res) => {
         ]
       }
     };
+
+    // 5. Sign JWT using Service Account Private Key
+    const token = jwt.sign(passPayload, serviceAccount.private_key, { algorithm: 'RS256' });
+    const googleSaveUrl = `https://pay.google.com/gp/v/save/${token}`;
+
+    // 6. Redirect customer directly to Google Wallet App save screen
+    res.redirect(googleSaveUrl);
+
+  } catch (err) {
+    console.error('[Google Wallet Error]:', err);
+    res.status(500).send(`Failed to generate Google Wallet Pass: ${err.message}`);
+  }
+});
 
     // 4. Sign JWT using Service Account Private Key
     const token = jwt.sign(passPayload, serviceAccount.private_key, { algorithm: 'RS256' });
