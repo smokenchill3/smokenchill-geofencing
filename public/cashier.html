@@ -122,7 +122,6 @@
       border-bottom: 1px solid rgba(255,255,255,0.1);
     }
 
-    /* Admin-protected section styled distinctly at the bottom */
     #admin-auth-section {
       border: 2px dashed var(--primary);
     }
@@ -133,7 +132,7 @@
   <div class="container">
     <h1>Smoke N Chill — Cashier & Admin Portal</h1>
 
-    <!-- SECTION 1: CASHIER SCANNER -->
+    <!-- 1. CASHIER SCANNER -->
     <div class="card">
       <h2>📷 Cashier Scanner & Redemption</h2>
       <div id="reader"></div>
@@ -147,7 +146,7 @@
       <button class="btn-action btn-danger" onclick="undoRedemption()">↩️ Undo Accidental Redemption</button>
     </div>
 
-    <!-- SECTION 2: ADMIN LOGIN & CONTROLS -->
+    <!-- 2. ADMIN LOGIN -->
     <div class="card" id="login-card">
       <h2>🔐 Admin Login</h2>
       <input type="text" id="login-user" placeholder="Username (default: admin)">
@@ -155,18 +154,16 @@
       <button class="btn-action" onclick="loginAdmin()">Login to Admin Portal</button>
     </div>
 
-    <!-- SECTION 3: ADMIN AUTHORIZATION / MANAGER CONTROLS (Bottom Panel) -->
+    <!-- 3. ADMIN AUTHORIZATION / MANAGER CONTROLS (BOTTOM) -->
     <div class="card" id="admin-auth-section" style="display: none;">
       <h2 style="color: var(--primary);">🛡️ Admin Authorization & Management Panel</h2>
-      <p style="font-size: 0.85rem; color: var(--muted); margin-bottom: 15px;">Logged in as Authorized Admin / Manager</p>
+      <p style="font-size: 0.85rem; color: var(--muted); margin-bottom: 15px;">Authorized Admin Mode</p>
 
-      <!-- Coupon Enable/Disable & Management -->
       <div style="margin-bottom: 20px;">
         <h3 style="font-size: 1rem; color: #fff;">🏷️ Enable / Disable & Manage Coupons</h3>
         <div id="admin-deals-list">Loading deals...</div>
       </div>
 
-      <!-- Add New Coupon -->
       <div style="margin-bottom: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
         <h3 style="font-size: 1rem; color: #fff;">➕ Add New Coupon / Deal</h3>
         <input type="text" id="new-code" placeholder="Coupon Code (e.g. HMP10)">
@@ -175,7 +172,6 @@
         <button class="btn-action" onclick="saveCoupon()">Save & Publish Coupon</button>
       </div>
 
-      <!-- Upcoming Features / Notifications -->
       <div style="margin-bottom: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
         <h3 style="font-size: 1rem; color: #fff;">📢 Push Notifications & Upcoming Features</h3>
         <input type="text" id="notif-title" placeholder="Notice / Event Title">
@@ -188,7 +184,6 @@
         <button class="btn-action" onclick="publishNotice()">Broadcast Notification</button>
       </div>
 
-      <!-- Add Managers -->
       <div style="padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
         <h3 style="font-size: 1rem; color: #fff;">👤 Add Manager Account</h3>
         <input type="text" id="mgr-user" placeholder="New Manager Username">
@@ -206,7 +201,6 @@
       unlockAdminUI();
     }
 
-    // Cashier Scanner Setup
     const html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false);
     html5QrcodeScanner.render((text) => processRedemption(text));
 
@@ -273,7 +267,6 @@
       }
     }
 
-    // Admin Authentication & Dashboard
     async function loginAdmin() {
       const u = document.getElementById('login-user').value;
       const p = document.getElementById('login-pass').value;
