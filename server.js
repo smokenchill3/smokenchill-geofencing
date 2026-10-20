@@ -230,7 +230,6 @@ app.get('/api/wallet/google/:code', async (req, res) => {
     const classId = `${issuerId}.smokenchill_${promoCode.toLowerCase()}`;
     const objectId = `${issuerId}.pass_${promoCode.toLowerCase()}_${Date.now()}`;
 
-    // Construct Pass Payload with both Class and Object definition
     const passPayload = {
       iss: serviceAccount.client_email,
       aud: 'google',
@@ -242,7 +241,7 @@ app.get('/api/wallet/google/:code', async (req, res) => {
             id: classId,
             issuerName: 'Smoke N Chill',
             provider: 'Smoke N Chill',
-            redemptionChannel: 'IN_STORE', // 👈 Required by Google Wallet OfferClass schema
+            redemptionChannel: 'INSTORE', // 👈 Correct enum value without underscore
             title: offer.title,
             reviewStatus: 'UNDER_REVIEW'
           }
