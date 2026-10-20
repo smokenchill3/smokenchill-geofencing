@@ -241,9 +241,31 @@ app.get('/api/wallet/google/:code', async (req, res) => {
             id: classId,
             issuerName: 'Smoke N Chill',
             provider: 'Smoke N Chill',
-            redemptionChannel: 'INSTORE', // 👈 Correct enum value without underscore
+            redemptionChannel: 'INSTORE',
             title: offer.title,
-            reviewStatus: 'UNDER_REVIEW'
+            reviewStatus: 'UNDER_REVIEW',
+            logo: {
+              sourceUri: {
+                uri: 'https://smokenchill-geofencing.onrender.com/Snc3-logo.png'
+              },
+              contentDescription: {
+                defaultValue: {
+                  language: 'en-US',
+                  value: 'Smoke N Chill Logo'
+                }
+              }
+            },
+            heroImage: {
+              sourceUri: {
+                uri: 'https://smokenchill-geofencing.onrender.com/Snc3-Entrance.jpg'
+              },
+              contentDescription: {
+                defaultValue: {
+                  language: 'en-US',
+                  value: 'Smoke N Chill Storefront'
+                }
+              }
+            }
           }
         ],
         offerObjects: [
