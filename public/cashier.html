@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smoke N Chill — Cashier Scanner</title>
+  <title>Smoke N Chill — Cashier & Admin Portal</title>
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
@@ -12,13 +12,14 @@
       --card: #1e293b;
       --accent: #22c55e;
       --danger: #ef4444;
+      --primary: #3b82f6;
       --text: #f8fafc;
       --muted: #94a3b8;
     }
 
     body {
       margin: 0;
-      padding: 20px;
+      padding: 15px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: var(--bg);
       color: var(--text);
@@ -31,22 +32,62 @@
 
     .container {
       width: 100%;
-      max-width: 500px;
+      max-width: 650px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
     }
 
     h1 {
-      font-size: 1.5rem;
-      text-align: center;
+      font-size: 1.3rem;
+      margin: 0;
+    }
+
+    .tab-nav {
+      display: flex;
+      gap: 10px;
       margin-bottom: 20px;
     }
 
+    .tab-btn {
+      flex: 1;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: #000;
+      color: #fff;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+
+    .tab-btn.active {
+      background: var(--primary);
+      border-color: var(--primary);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Scanner Tab */
     #reader {
       width: 100%;
       background: #000;
       border-radius: 12px;
       overflow: hidden;
-      margin-bottom: 20px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      margin-bottom: 15px;
+      border: 1px solid rgba(255,255,255,0.1);
     }
 
     .manual-entry {
@@ -55,91 +96,190 @@
       margin-bottom: 15px;
     }
 
-    input[type="text"] {
-      flex: 1;
-      padding: 14px;
-      border-radius: 10px;
-      border: 1px solid rgba(255, 255, 255, 0.2);
+    input[type="text"], input[type="password"], select, textarea {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.2);
       background: #000;
       color: #fff;
       font-size: 1rem;
-      text-transform: uppercase;
       box-sizing: border-box;
+      margin-bottom: 10px;
     }
 
-    button.btn-redeem {
-      padding: 14px 24px;
-      border-radius: 10px;
+    button.btn-action {
+      padding: 12px 20px;
+      border-radius: 8px;
       border: none;
       background: var(--accent);
       color: #fff;
       font-weight: bold;
       font-size: 1rem;
       cursor: pointer;
+      width: 100%;
+    }
+
+    .btn-undo {
+      background: var(--danger);
+      margin-top: 15px;
     }
 
     #result-box {
-      padding: 16px;
+      padding: 15px;
       border-radius: 12px;
       text-align: center;
       font-weight: bold;
-      font-size: 1.05rem;
+      font-size: 1rem;
       display: none;
       margin-bottom: 15px;
     }
 
-    .success {
-      background: rgba(34, 197, 94, 0.2);
-      border: 1px solid var(--accent);
-      color: #4ade80;
+    .success { background: rgba(34, 197, 94, 0.2); border: 1px solid var(--accent); color: #4ade80; }
+    .error { background: rgba(239, 68, 68, 0.2); border: 1px solid var(--danger); color: #f87171; }
+
+    /* Admin Panel Cards */
+    .card {
+      background: var(--card);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+      border: 1px solid rgba(255,255,255,0.05);
     }
 
-    .error {
-      background: rgba(239, 68, 68, 0.2);
-      border: 1px solid var(--danger);
-      color: #f87171;
+    .card h2 {
+      font-size: 1.1rem;
+      margin-top: 0;
+      margin-bottom: 15px;
+      color: var(--accent);
     }
 
-    .btn-undo {
-      width: 100%;
-      padding: 14px;
-      border-radius: 10px;
-      border: none;
+    .item-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .btn-delete {
       background: var(--danger);
       color: #fff;
-      font-weight: bold;
-      font-size: 1rem;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
       cursor: pointer;
-      display: none;
+      font-weight: bold;
+    }
+
+    .btn-toggle {
+      background: #f59e0b;
+      color: #fff;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      margin-right: 8px;
     }
   </style>
 </head>
 <body>
 
   <div class="container">
-    <h1>Smoke N Chill — Cashier Scanner</h1>
+    <header>
+      <h1>Smoke N Chill Portal</h1>
+      <span id="auth-status" style="font-size: 0.85rem; color: var(--muted);">Cashier Mode</span>
+    </header>
 
-    <div id="reader"></div>
-
-    <div class="manual-entry">
-      <input type="text" id="manual-code" placeholder="ENTER CODE (E.G. HMP10:CUST_123)">
-      <button class="btn-redeem" onclick="redeemManual()">Redeem</button>
+    <div class="tab-nav">
+      <button class="tab-btn active" onclick="switchTab('scanner')">📷 Cashier Scanner</button>
+      <button class="tab-btn" onclick="switchTab('admin')">🔐 Admin / Manager Controls</button>
     </div>
 
-    <div id="result-box"></div>
-    <button id="undo-btn" class="btn-undo" onclick="undoRedemption()">↩️ Undo Accidental Redemption</button>
+    <!-- TAB 1: CASHIER SCANNER & INSTANT UNDO -->
+    <div id="tab-scanner" class="tab-content active">
+      <div id="reader"></div>
+
+      <div class="manual-entry">
+        <input type="text" id="manual-code" placeholder="ENTER CODE (E.G. HMP10:CUST_123)">
+        <button class="btn-action" style="width: auto;" onclick="redeemManual()">Redeem</button>
+      </div>
+
+      <div id="result-box"></div>
+      <button class="btn-action btn-undo" onclick="undoRedemption()">↩️ Undo Accidental Redemption</button>
+    </div>
+
+    <!-- TAB 2: ADMIN CONTROLS (Login, Coupons, Notifications) -->
+    <div id="tab-admin" class="tab-content">
+      
+      <!-- Login Card -->
+      <div id="login-card" class="card">
+        <h2>Admin Login</h2>
+        <input type="text" id="login-user" placeholder="Username (default: admin)">
+        <input type="password" id="login-pass" placeholder="Password">
+        <button class="btn-action" onclick="loginAdmin()">Login to Dashboard</button>
+      </div>
+
+      <!-- Protected Admin Dashboard -->
+      <div id="admin-dashboard" style="display: none;">
+        
+        <!-- Create / Edit Coupon -->
+        <div class="card">
+          <h2>➕ Create / Update Coupon</h2>
+          <input type="text" id="new-code" placeholder="Coupon Code (e.g. HMP10)">
+          <input type="text" id="new-title" placeholder="Offer Title (e.g. 10% Off Hemp)">
+          <input type="text" id="new-discount" placeholder="Discount Text (e.g. 10% OFF)">
+          <button class="btn-action" onclick="saveCoupon()">Save Coupon</button>
+        </div>
+
+        <!-- Manage Active / Inactive Deals -->
+        <div class="card">
+          <h2>🏷️ Manage Deals & Enable/Disable</h2>
+          <div id="admin-deals-list">Loading deals...</div>
+        </div>
+
+        <!-- Broadcast Notice / Notification -->
+        <div class="card">
+          <h2>📢 Push Live Notice / Notification</h2>
+          <input type="text" id="notif-title" placeholder="Notice Title">
+          <textarea id="notif-message" rows="3" placeholder="Message for customers..."></textarea>
+          <select id="notif-type">
+            <option value="info">ℹ️ General Notice</option>
+            <option value="emergency">🚨 Emergency / Notice</option>
+            <option value="upcoming">🎉 Upcoming Event</option>
+          </select>
+          <button class="btn-action" onclick="publishNotice()">Broadcast Notification</button>
+        </div>
+
+      </div>
+
+    </div>
   </div>
 
   <script>
-    let lastRedeemedCode = '';
-    let lastCustomerId = '';
+    let authToken = localStorage.getItem('snc_admin_token');
 
-    const html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false);
-    html5QrcodeScanner.render(onScanSuccess);
-
-    function onScanSuccess(decodedText) {
-      processRedemption(decodedText);
+    if (authToken) {
+      unlockAdminUI();
     }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+      if (tab === 'scanner') {
+        document.querySelectorAll('.tab-btn')[0].classList.add('active');
+        document.getElementById('tab-scanner').classList.add('active');
+      } else {
+        document.querySelectorAll('.tab-btn')[1].classList.add('active');
+        document.getElementById('tab-admin').classList.add('active');
+      }
+    }
+
+    // Cashier Scanner Setup
+    const html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false);
+    html5QrcodeScanner.render((text) => processRedemption(text));
 
     function redeemManual() {
       const val = document.getElementById('manual-code').value.trim();
@@ -148,7 +288,6 @@
 
     async function processRedemption(rawCode) {
       const box = document.getElementById('result-box');
-      const undoBtn = document.getElementById('undo-btn');
 
       try {
         const res = await fetch('/api/redeem', {
@@ -163,20 +302,9 @@
         if (data.success) {
           box.className = 'success';
           box.innerText = data.message;
-          undoBtn.style.display = 'block';
-
-          if (rawCode.includes(':')) {
-            const parts = rawCode.split(':');
-            lastRedeemedCode = parts[0];
-            lastCustomerId = parts[1];
-          } else {
-            lastRedeemedCode = rawCode;
-            lastCustomerId = 'general_customer';
-          }
         } else {
           box.className = 'error';
           box.innerText = data.message;
-          undoBtn.style.display = 'none';
         }
       } catch (err) {
         box.style.display = 'block';
@@ -186,31 +314,162 @@
     }
 
     async function undoRedemption() {
-      if (!lastRedeemedCode) return;
+      const inputVal = document.getElementById('manual-code').value.trim();
+      if (!inputVal) {
+        alert('Please enter or scan the coupon code/customer ID into the box above to undo.');
+        return;
+      }
 
       const box = document.getElementById('result-box');
-      const undoBtn = document.getElementById('undo-btn');
 
       try {
         const res = await fetch('/api/cashier/reset-cooldown', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ couponCode: lastRedeemedCode, customerId: lastCustomerId })
+          body: JSON.stringify({ couponCode: inputVal })
         });
 
         const data = await res.json();
+        box.style.display = 'block';
+
         if (data.success) {
           box.className = 'success';
           box.innerText = data.message;
-          undoBtn.style.display = 'none';
-          lastRedeemedCode = '';
-          lastCustomerId = '';
         } else {
-          alert('Failed to undo: ' + data.message);
+          box.className = 'error';
+          box.innerText = data.message;
         }
       } catch (err) {
         alert('Server error executing undo.');
       }
+    }
+
+    // Admin Functions
+    async function loginAdmin() {
+      const u = document.getElementById('login-user').value;
+      const p = document.getElementById('login-pass').value;
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: u, password: p })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          authToken = data.token;
+          localStorage.setItem('snc_admin_token', authToken);
+          unlockAdminUI();
+        } else {
+          alert('Login failed: ' + data.message);
+        }
+      } catch (err) {
+        alert('Server error during login.');
+      }
+    }
+
+    function unlockAdminUI() {
+      document.getElementById('login-card').style.display = 'none';
+      document.getElementById('admin-dashboard').style.display = 'block';
+      document.getElementById('auth-status').innerText = 'Authorized Admin';
+      loadAdminDeals();
+    }
+
+    async function loadAdminDeals() {
+      try {
+        const res = await fetch('/api/promotions/all');
+        const data = await res.json();
+        const list = document.getElementById('admin-deals-list');
+
+        if (!data.success || !data.promotions.length) {
+          list.innerHTML = '<p>No coupons found.</p>';
+          return;
+        }
+
+        list.innerHTML = data.promotions.map(p => `
+          <div class="item-row">
+            <div>
+              <strong>${p.code}</strong> — ${p.title} 
+              <br><small style="color: ${p.is_active ? '#4ade80' : '#f87171'}">${p.is_active ? 'ACTIVE' : 'DISABLED'}</small>
+            </div>
+            <div>
+              <button class="btn-toggle" onclick="toggleCoupon('${p.code}', ${!p.is_active})">${p.is_active ? 'Disable' : 'Enable'}</button>
+              <button class="btn-delete" onclick="deleteCoupon('${p.code}')">Delete</button>
+            </div>
+          </div>
+        `).join('');
+      } catch (err) {
+        console.error('Failed to load admin deals');
+      }
+    }
+
+    async function saveCoupon() {
+      const code = document.getElementById('new-code').value;
+      const title = document.getElementById('new-title').value;
+      const discountText = document.getElementById('new-discount').value;
+
+      try {
+        const res = await fetch('/api/admin/promotions/create', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ code, title, discountText })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          alert(data.message);
+          loadAdminDeals();
+        } else {
+          alert('Error: ' + data.message);
+        }
+      } catch (err) {
+        alert('Server error saving coupon.');
+      }
+    }
+
+    async function toggleCoupon(code, nextState) {
+      try {
+        await fetch('/api/promotions/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, is_active: nextState })
+        });
+        loadAdminDeals();
+      } catch (err) {
+        alert('Failed to update coupon state.');
+      }
+    }
+
+    async function deleteCoupon(code) {
+      if (!confirm(`Are you sure you want to delete ${code}?`)) return;
+
+      try {
+        const res = await fetch('/api/promotions/delete', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ code })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          loadAdminDeals();
+        } else {
+          alert('Delete failed: ' + data.message);
+        }
+      } catch (err) {
+        alert('Server error deleting coupon.');
+      }
+    }
+
+    async function publishNotice() {
+      alert('Notification broadcast feature ready!');
     }
   </script>
 </body>
