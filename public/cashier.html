@@ -19,7 +19,7 @@
 
     body {
       margin: 0;
-      padding: 15px;
+      padding: 20px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: var(--bg);
       color: var(--text);
@@ -32,62 +32,40 @@
 
     .container {
       width: 100%;
-      max-width: 650px;
-    }
-
-    header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 20px;
-      padding-bottom: 10px;
-      border-bottom: 1px solid rgba(255,255,255,0.1);
+      max-width: 600px;
     }
 
     h1 {
-      font-size: 1.3rem;
-      margin: 0;
-    }
-
-    .tab-nav {
-      display: flex;
-      gap: 10px;
+      font-size: 1.5rem;
+      text-align: center;
       margin-bottom: 20px;
     }
 
-    .tab-btn {
-      flex: 1;
-      padding: 12px;
-      border-radius: 8px;
-      border: 1px solid rgba(255,255,255,0.2);
-      background: #000;
-      color: #fff;
-      font-weight: bold;
-      cursor: pointer;
-      font-size: 0.95rem;
+    .card {
+      background: var(--card);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
     }
 
-    .tab-btn.active {
-      background: var(--primary);
-      border-color: var(--primary);
+    .card h2 {
+      font-size: 1.1rem;
+      margin-top: 0;
+      margin-bottom: 15px;
+      color: var(--accent);
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      padding-bottom: 8px;
     }
 
-    .tab-content {
-      display: none;
-    }
-
-    .tab-content.active {
-      display: block;
-    }
-
-    /* Scanner Tab */
     #reader {
       width: 100%;
       background: #000;
       border-radius: 12px;
       overflow: hidden;
       margin-bottom: 15px;
-      border: 1px solid rgba(255,255,255,0.1);
+      border: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     .manual-entry {
@@ -100,7 +78,7 @@
       width: 100%;
       padding: 12px;
       border-radius: 8px;
-      border: 1px solid rgba(255,255,255,0.2);
+      border: 1px solid rgba(255, 255, 255, 0.2);
       background: #000;
       color: #fff;
       font-size: 1rem;
@@ -120,10 +98,8 @@
       width: 100%;
     }
 
-    .btn-undo {
-      background: var(--danger);
-      margin-top: 15px;
-    }
+    .btn-danger { background: var(--danger); }
+    .btn-warning { background: #f59e0b; color: #000; }
 
     #result-box {
       padding: 15px;
@@ -138,22 +114,6 @@
     .success { background: rgba(34, 197, 94, 0.2); border: 1px solid var(--accent); color: #4ade80; }
     .error { background: rgba(239, 68, 68, 0.2); border: 1px solid var(--danger); color: #f87171; }
 
-    /* Admin Panel Cards */
-    .card {
-      background: var(--card);
-      border-radius: 12px;
-      padding: 20px;
-      margin-bottom: 20px;
-      border: 1px solid rgba(255,255,255,0.05);
-    }
-
-    .card h2 {
-      font-size: 1.1rem;
-      margin-top: 0;
-      margin-bottom: 15px;
-      color: var(--accent);
-    }
-
     .item-row {
       display: flex;
       justify-content: space-between;
@@ -162,43 +122,20 @@
       border-bottom: 1px solid rgba(255,255,255,0.1);
     }
 
-    .btn-delete {
-      background: var(--danger);
-      color: #fff;
-      border: none;
-      padding: 6px 12px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-weight: bold;
-    }
-
-    .btn-toggle {
-      background: #f59e0b;
-      color: #fff;
-      border: none;
-      padding: 6px 12px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-weight: bold;
-      margin-right: 8px;
+    /* Admin-protected section styled distinctly at the bottom */
+    #admin-auth-section {
+      border: 2px dashed var(--primary);
     }
   </style>
 </head>
 <body>
 
   <div class="container">
-    <header>
-      <h1>Smoke N Chill Portal</h1>
-      <span id="auth-status" style="font-size: 0.85rem; color: var(--muted);">Cashier Mode</span>
-    </header>
+    <h1>Smoke N Chill — Cashier & Admin Portal</h1>
 
-    <div class="tab-nav">
-      <button class="tab-btn active" onclick="switchTab('scanner')">📷 Cashier Scanner</button>
-      <button class="tab-btn" onclick="switchTab('admin')">🔐 Admin / Manager Controls</button>
-    </div>
-
-    <!-- TAB 1: CASHIER SCANNER & INSTANT UNDO -->
-    <div id="tab-scanner" class="tab-content active">
+    <!-- SECTION 1: CASHIER SCANNER -->
+    <div class="card">
+      <h2>📷 Cashier Scanner & Redemption</h2>
       <div id="reader"></div>
 
       <div class="manual-entry">
@@ -207,51 +144,56 @@
       </div>
 
       <div id="result-box"></div>
-      <button class="btn-action btn-undo" onclick="undoRedemption()">↩️ Undo Accidental Redemption</button>
+      <button class="btn-action btn-danger" onclick="undoRedemption()">↩️ Undo Accidental Redemption</button>
     </div>
 
-    <!-- TAB 2: ADMIN CONTROLS (Login, Coupons, Notifications) -->
-    <div id="tab-admin" class="tab-content">
-      
-      <!-- Login Card -->
-      <div id="login-card" class="card">
-        <h2>Admin Login</h2>
-        <input type="text" id="login-user" placeholder="Username (default: admin)">
-        <input type="password" id="login-pass" placeholder="Password">
-        <button class="btn-action" onclick="loginAdmin()">Login to Dashboard</button>
+    <!-- SECTION 2: ADMIN LOGIN & CONTROLS -->
+    <div class="card" id="login-card">
+      <h2>🔐 Admin Login</h2>
+      <input type="text" id="login-user" placeholder="Username (default: admin)">
+      <input type="password" id="login-pass" placeholder="Password">
+      <button class="btn-action" onclick="loginAdmin()">Login to Admin Portal</button>
+    </div>
+
+    <!-- SECTION 3: ADMIN AUTHORIZATION / MANAGER CONTROLS (Bottom Panel) -->
+    <div class="card" id="admin-auth-section" style="display: none;">
+      <h2 style="color: var(--primary);">🛡️ Admin Authorization & Management Panel</h2>
+      <p style="font-size: 0.85rem; color: var(--muted); margin-bottom: 15px;">Logged in as Authorized Admin / Manager</p>
+
+      <!-- Coupon Enable/Disable & Management -->
+      <div style="margin-bottom: 20px;">
+        <h3 style="font-size: 1rem; color: #fff;">🏷️ Enable / Disable & Manage Coupons</h3>
+        <div id="admin-deals-list">Loading deals...</div>
       </div>
 
-      <!-- Protected Admin Dashboard -->
-      <div id="admin-dashboard" style="display: none;">
-        
-        <!-- Create / Edit Coupon -->
-        <div class="card">
-          <h2>➕ Create / Update Coupon</h2>
-          <input type="text" id="new-code" placeholder="Coupon Code (e.g. HMP10)">
-          <input type="text" id="new-title" placeholder="Offer Title (e.g. 10% Off Hemp)">
-          <input type="text" id="new-discount" placeholder="Discount Text (e.g. 10% OFF)">
-          <button class="btn-action" onclick="saveCoupon()">Save Coupon</button>
-        </div>
+      <!-- Add New Coupon -->
+      <div style="margin-bottom: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+        <h3 style="font-size: 1rem; color: #fff;">➕ Add New Coupon / Deal</h3>
+        <input type="text" id="new-code" placeholder="Coupon Code (e.g. HMP10)">
+        <input type="text" id="new-title" placeholder="Offer Title (e.g. 10% Off)">
+        <input type="text" id="new-discount" placeholder="Discount Banner Text (e.g. 10% OFF)">
+        <button class="btn-action" onclick="saveCoupon()">Save & Publish Coupon</button>
+      </div>
 
-        <!-- Manage Active / Inactive Deals -->
-        <div class="card">
-          <h2>🏷️ Manage Deals & Enable/Disable</h2>
-          <div id="admin-deals-list">Loading deals...</div>
-        </div>
+      <!-- Upcoming Features / Notifications -->
+      <div style="margin-bottom: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+        <h3 style="font-size: 1rem; color: #fff;">📢 Push Notifications & Upcoming Features</h3>
+        <input type="text" id="notif-title" placeholder="Notice / Event Title">
+        <textarea id="notif-message" rows="3" placeholder="Message details for customers..."></textarea>
+        <select id="notif-type">
+          <option value="info">ℹ️ General Notice</option>
+          <option value="emergency">🚨 Emergency / Closure</option>
+          <option value="upcoming">🎉 Upcoming Feature / Deal</option>
+        </select>
+        <button class="btn-action" onclick="publishNotice()">Broadcast Notification</button>
+      </div>
 
-        <!-- Broadcast Notice / Notification -->
-        <div class="card">
-          <h2>📢 Push Live Notice / Notification</h2>
-          <input type="text" id="notif-title" placeholder="Notice Title">
-          <textarea id="notif-message" rows="3" placeholder="Message for customers..."></textarea>
-          <select id="notif-type">
-            <option value="info">ℹ️ General Notice</option>
-            <option value="emergency">🚨 Emergency / Notice</option>
-            <option value="upcoming">🎉 Upcoming Event</option>
-          </select>
-          <button class="btn-action" onclick="publishNotice()">Broadcast Notification</button>
-        </div>
-
+      <!-- Add Managers -->
+      <div style="padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+        <h3 style="font-size: 1rem; color: #fff;">👤 Add Manager Account</h3>
+        <input type="text" id="mgr-user" placeholder="New Manager Username">
+        <input type="password" id="mgr-pass" placeholder="New Manager Password">
+        <button class="btn-action btn-warning" onclick="addManager()">Create Manager Account</button>
       </div>
 
     </div>
@@ -262,19 +204,6 @@
 
     if (authToken) {
       unlockAdminUI();
-    }
-
-    function switchTab(tab) {
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-
-      if (tab === 'scanner') {
-        document.querySelectorAll('.tab-btn')[0].classList.add('active');
-        document.getElementById('tab-scanner').classList.add('active');
-      } else {
-        document.querySelectorAll('.tab-btn')[1].classList.add('active');
-        document.getElementById('tab-admin').classList.add('active');
-      }
     }
 
     // Cashier Scanner Setup
@@ -316,7 +245,7 @@
     async function undoRedemption() {
       const inputVal = document.getElementById('manual-code').value.trim();
       if (!inputVal) {
-        alert('Please enter or scan the coupon code/customer ID into the box above to undo.');
+        alert('Please enter or scan the code into the input box above to undo.');
         return;
       }
 
@@ -344,7 +273,7 @@
       }
     }
 
-    // Admin Functions
+    // Admin Authentication & Dashboard
     async function loginAdmin() {
       const u = document.getElementById('login-user').value;
       const p = document.getElementById('login-pass').value;
@@ -371,8 +300,7 @@
 
     function unlockAdminUI() {
       document.getElementById('login-card').style.display = 'none';
-      document.getElementById('admin-dashboard').style.display = 'block';
-      document.getElementById('auth-status').innerText = 'Authorized Admin';
+      document.getElementById('admin-auth-section').style.display = 'block';
       loadAdminDeals();
     }
 
@@ -394,8 +322,8 @@
               <br><small style="color: ${p.is_active ? '#4ade80' : '#f87171'}">${p.is_active ? 'ACTIVE' : 'DISABLED'}</small>
             </div>
             <div>
-              <button class="btn-toggle" onclick="toggleCoupon('${p.code}', ${!p.is_active})">${p.is_active ? 'Disable' : 'Enable'}</button>
-              <button class="btn-delete" onclick="deleteCoupon('${p.code}')">Delete</button>
+              <button class="btn-action btn-warning" style="padding: 6px 12px; font-size: 0.85rem; width: auto;" onclick="toggleCoupon('${p.code}', ${!p.is_active})">${p.is_active ? 'Disable' : 'Enable'}</button>
+              <button class="btn-action btn-danger" style="padding: 6px 12px; font-size: 0.85rem; width: auto;" onclick="deleteCoupon('${p.code}')">Delete</button>
             </div>
           </div>
         `).join('');
@@ -470,6 +398,10 @@
 
     async function publishNotice() {
       alert('Notification broadcast feature ready!');
+    }
+
+    async function addManager() {
+      alert('Manager account creation ready!');
     }
   </script>
 </body>
