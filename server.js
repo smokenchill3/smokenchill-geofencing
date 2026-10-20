@@ -208,33 +208,31 @@ app.get('/api/wallet/google/:code', async (req, res) => {
             provider: 'Smoke N Chill',
             redemptionChannel: 'INSTORE',
             title: offer.title,
-            reviewStatus: 'APPROVED'
+            reviewStatus: 'APPROVED',
+            logo: {
+              sourceUri: {
+                uri: 'https://smokenchill-geofencing.onrender.com/Snc3-logo.png'
+              },
+              contentDescription: {
+                defaultValue: {
+                  language: 'en-US',
+                  value: 'Smoke N Chill Logo'
+                }
+              }
+            },
+            heroImage: {
+              sourceUri: {
+                uri: 'https://smokenchill-geofencing.onrender.com/Snc3-Entrance.jpg'
+              },
+              contentDescription: {
+                defaultValue: {
+                  language: 'en-US',
+                  value: 'Smoke N Chill Interior'
+                }
+              }
+            }
           }
         ],
-        offerObjects: [
-          {
-            id: objectId,
-            classId: classId,
-            state: 'ACTIVE',
-            barcode: {
-              type: 'QR_CODE',
-              value: `${offer.code}:${customerId}`,
-              alternateText: `${offer.code}`
-            },
-            title: offer.title,
-            header: offer.discount_text,
-            textModulesData: [
-              {
-                header: 'Store Location',
-                body: 'Smoke N Chill — Austin, TX'
-              },
-              {
-                header: 'Terms',
-                body: '1 redemption per customer every 24 hours.'
-              }
-            ]
-          }
-        ]
       }
     };
 
@@ -308,7 +306,14 @@ app.post('/api/redeem', async (req, res) => {
     if (cooldownCheck.rows.length > 0) {
       const lastRedeemed = new Date(cooldownCheck.rows[0].redeemed_at);
       const nextAvailable = new Date(lastRedeemed.getTime() + 24 * 60 * 60 * 1000);
-      const timeString = nextAvailable.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      
+      // Explicitly format to Austin, Texas time zone
+      const timeString = nextAvailable.toLocaleTimeString('en-US', {
+        timeZone: 'America/Chicago',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      });
 
       return res.status(400).json({
         success: false,
