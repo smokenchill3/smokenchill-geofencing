@@ -173,7 +173,9 @@ app.post('/api/promotions/delete', verifyAdminToken, async (req, res) => {
   }
 });
 
-// Google Wallet Pass Generator
+// ==============================================
+// Google Wallet API Integration
+// ==============================================
 app.get('/api/wallet/google/:code', async (req, res) => {
   const promoCode = req.params.code.toUpperCase();
   const customerId = req.query.customerId || 'cust_' + Math.random().toString(36).substring(2, 10);
@@ -208,7 +210,7 @@ app.get('/api/wallet/google/:code', async (req, res) => {
             provider: 'Smoke N Chill',
             redemptionChannel: 'INSTORE',
             title: offer.title,
-            reviewStatus: 'APPROVED',
+            reviewStatus: 'UNDER_REVIEW',
             logo: {
               sourceUri: {
                 uri: 'https://smokenchill-geofencing.onrender.com/Snc3-logo.png'
@@ -227,12 +229,36 @@ app.get('/api/wallet/google/:code', async (req, res) => {
               contentDescription: {
                 defaultValue: {
                   language: 'en-US',
-                  value: 'Smoke N Chill Interior'
+                  value: 'Smoke N Chill Store'
                 }
               }
             }
           }
         ],
+        offerObjects: [
+          {
+            id: objectId,
+            classId: classId,
+            state: 'ACTIVE',
+            barcode: {
+              type: 'QR_CODE',
+              value: `${offer.code}:${customerId}`,
+              alternateText: offer.code
+            },
+            title: offer.title,
+            header: offer.discount_text,
+            textModulesData: [
+              {
+                header: 'Store Location',
+                body: 'Smoke N Chill — Austin, TX'
+              },
+              {
+                header: 'Terms',
+                body: '1 redemption per customer every 24 hours.'
+              }
+            ]
+          }
+        ]
       }
     };
 
