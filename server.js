@@ -13,7 +13,6 @@ const io = new Server(server);
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'smokenchill_secret_key_2026';
 
-// PostgreSQL Connection Setup
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
@@ -22,7 +21,6 @@ const pool = new Pool({
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Explicit File Routing
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
@@ -31,9 +29,6 @@ app.get('/cashier.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'cashier.html'));
 });
 
-// ==============================================
-// Database Schema Initialization
-// ==============================================
 async function initDb() {
   try {
     await pool.query(`
@@ -73,7 +68,6 @@ async function initDb() {
       );
     `);
 
-    // Seed default admin user if none exists
     const userCheck = await pool.query('SELECT * FROM users WHERE username = $1', ['admin']);
     if (userCheck.rows.length === 0) {
       const hashedPassword = await bcrypt.hash('smokenchill123', 10);
@@ -81,10 +75,7 @@ async function initDb() {
         'INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)',
         ['admin', hashedPassword, 'admin']
       );
-      console.log('[PostgreSQL] Created default admin user (admin/smokenchill123)');
     }
-
-    console.log('[PostgreSQL] Database schema initialized successfully.');
   } catch (err) {
     console.error('[PostgreSQL Init Error]:', err.message);
   }
@@ -92,7 +83,6 @@ async function initDb() {
 
 initDb();
 
-// Middleware: Admin Authentication
 function verifyAdminToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   if (!authHeader) return res.status(401).json({ success: false, message: 'Access denied. Token missing.' });
@@ -105,9 +95,6 @@ function verifyAdminToken(req, res, next) {
   });
 }
 
-// ==============================================
-// Authentication Routes
-// ==============================================
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
   try {
@@ -129,27 +116,6 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-app.post('/api/admin/add-user', verifyAdminToken, async (req, res) => {
-  const { newUsername, newPassword } = req.body;
-  if (!newUsername || !newPassword) {
-    return res.status(400).json({ success: false, message: 'Username and password required.' });
-  }
-
-  try {
-    const hashedPassword = await bcrypt.hash(newPassword.trim(), 10);
-    await pool.query(
-      'INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)',
-      [newUsername.trim().toLowerCase(), hashedPassword, 'admin']
-    );
-    res.json({ success: true, message: `✅ User "${newUsername}" created successfully.` });
-  } catch (err) {
-    res.status(400).json({ success: false, message: 'Username already exists or database error.' });
-  }
-});
-
-// ==============================================
-// Promotion Management Routes
-// ==============================================
 app.get('/api/promotions/all', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM promotions ORDER BY id DESC');
@@ -179,7 +145,7 @@ app.post('/api/admin/promotions/create', verifyAdminToken, async (req, res) => {
     );
 
     io.emit('promoStateUpdated');
-    res.json({ success: true, message: `🎉 Promotion "${cleanCode}" saved to database!`, promotion: result.rows[0] });
+    res.json({ success: true, message: `🎉 Promotion "${cleanCode}" saved!`, promotion: result.rows[0] });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -207,11 +173,10 @@ app.post('/api/promotions/delete', verifyAdminToken, async (req, res) => {
   }
 });
 
-// ==============================================
-// Google Wallet API Integration (Auto-Creates Class & Object)
-// ==============================================
+// Google Wallet Pass Generator
 app.get('/api/wallet/google/:code', async (req, res) => {
   const promoCode = req.params.code.toUpperCase();
+  const customerId = req.query.customerId || 'cust_' + Math.random().toString(36).substring(2, 10);
 
   try {
     const promo = await pool.query('SELECT * FROM promotions WHERE code = $1 AND is_active = true', [promoCode]);
@@ -222,7 +187,7 @@ app.get('/api/wallet/google/:code', async (req, res) => {
     const offer = promo.rows[0];
 
     if (!process.env.SERVICE_ACCOUNT_JSON) {
-      return res.status(500).send('Server configuration error: SERVICE_ACCOUNT_JSON environment variable is missing.');
+      return res.status(500).send('Server configuration error: SERVICE_ACCOUNT_JSON is missing.');
     }
 
     const serviceAccount = JSON.parse(process.env.SERVICE_ACCOUNT_JSON);
@@ -243,29 +208,7 @@ app.get('/api/wallet/google/:code', async (req, res) => {
             provider: 'Smoke N Chill',
             redemptionChannel: 'INSTORE',
             title: offer.title,
-            reviewStatus: 'UNDER_REVIEW',
-            logo: {
-              sourceUri: {
-                uri: 'https://smokenchill-geofencing.onrender.com/Snc3-logo.png'
-              },
-              contentDescription: {
-                defaultValue: {
-                  language: 'en-US',
-                  value: 'Smoke N Chill Logo'
-                }
-              }
-            },
-            heroImage: {
-              sourceUri: {
-                uri: 'https://smokenchill-geofencing.onrender.com/Snc3-Entrance.jpg'
-              },
-              contentDescription: {
-                defaultValue: {
-                  language: 'en-US',
-                  value: 'Smoke N Chill Storefront'
-                }
-              }
-            }
+            reviewStatus: 'APPROVED'
           }
         ],
         offerObjects: [
@@ -275,8 +218,8 @@ app.get('/api/wallet/google/:code', async (req, res) => {
             state: 'ACTIVE',
             barcode: {
               type: 'QR_CODE',
-              value: `${offer.code}:${req.query.customerId || 'general_customer'}`,
-              alternateText: offer.code
+              value: `${offer.code}:${customerId}`,
+              alternateText: `${offer.code}`
             },
             title: offer.title,
             header: offer.discount_text,
@@ -296,18 +239,14 @@ app.get('/api/wallet/google/:code', async (req, res) => {
     };
 
     const token = jwt.sign(passPayload, serviceAccount.private_key, { algorithm: 'RS256' });
-    const googleSaveUrl = `https://pay.google.com/gp/v/save/${token}`;
-
-    res.redirect(googleSaveUrl);
+    res.redirect(`https://pay.google.com/gp/v/save/${token}`);
   } catch (err) {
     console.error('[Google Wallet Error]:', err);
     res.status(500).send(`Failed to generate Google Wallet Pass: ${err.message}`);
   }
 });
 
-// ==============================================
-// Redemption & Cooldown Logic
-// ==============================================
+// Coupon Status Check (Handles 24hr Cooldown for Web & Google Wallet)
 app.get('/api/coupon-status', async (req, res) => {
   const { code, customerId } = req.query;
   if (!code) return res.json({ redeemed: false });
@@ -335,6 +274,7 @@ app.get('/api/coupon-status', async (req, res) => {
   }
 });
 
+// Redeem Coupon (Cashier Scan or Portal Redeem)
 app.post('/api/redeem', async (req, res) => {
   const { couponCode, customerId } = req.body;
   if (!couponCode) return res.status(400).json({ success: false, message: '❌ Coupon code required.' });
@@ -350,15 +290,12 @@ app.post('/api/redeem', async (req, res) => {
 
   try {
     const promo = await pool.query(
-      `SELECT * FROM promotions 
-       WHERE UPPER(TRIM(code)) = UPPER(TRIM($1)) 
-         AND is_active = true 
-         AND expires_at > NOW()`,
+      `SELECT * FROM promotions WHERE UPPER(TRIM(code)) = $1 AND is_active = true AND expires_at > NOW()`,
       [code]
     );
 
     if (promo.rows.length === 0) {
-      return res.status(400).json({ success: false, message: `❌ Invalid, disabled, or expired coupon code (${code}).` });
+      return res.status(400).json({ success: false, message: `❌ Invalid or expired coupon code (${code}).` });
     }
 
     const cooldownCheck = await pool.query(
@@ -384,13 +321,14 @@ app.post('/api/redeem', async (req, res) => {
 
     io.emit('couponRedeemed', { couponCode: code, customerId: customer, unlocksAt });
 
-    res.json({ success: true, message: `✅ Coupon "${code}" redeemed successfully for customer (${customer})!` });
+    res.json({ success: true, message: `✅ Coupon "${code}" successfully redeemed for customer (${customer})!` });
   } catch (err) {
     res.status(500).json({ success: false, message: `Server error: ${err.message}` });
   }
 });
 
-app.post('/api/admin/reset-cooldown', verifyAdminToken, async (req, res) => {
+// Open to Cashiers: Undo Redemptions Instantly (No Admin Token Required)
+app.post('/api/cashier/reset-cooldown', async (req, res) => {
   const { couponCode, customerId } = req.body;
   if (!couponCode) return res.status(400).json({ success: false, message: 'Coupon code required.' });
 
@@ -410,44 +348,7 @@ app.post('/api/admin/reset-cooldown', verifyAdminToken, async (req, res) => {
     );
 
     io.emit('promoStateUpdated');
-    res.json({ success: true, message: `✅ Cleared lock for customer (${customer}) on "${code}". Coupon reopened!` });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
-
-// ==============================================
-// Announcements Routes
-// ==============================================
-app.get('/api/announcements', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM announcements WHERE is_active = true ORDER BY id DESC');
-    res.json({ success: true, announcements: result.rows });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
-
-app.post('/api/admin/announcements', verifyAdminToken, async (req, res) => {
-  const { title, message, type } = req.body;
-  try {
-    await pool.query(
-      'INSERT INTO announcements (title, message, type, is_active) VALUES ($1, $2, $3, true)',
-      [title.trim(), message.trim(), type]
-    );
-    io.emit('announcementsUpdated');
-    res.json({ success: true, message: '📢 Announcement published!' });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
-
-app.post('/api/admin/announcements/delete', verifyAdminToken, async (req, res) => {
-  const { id } = req.body;
-  try {
-    await pool.query('DELETE FROM announcements WHERE id = $1', [id]);
-    io.emit('announcementsUpdated');
-    res.json({ success: true, message: 'Announcement deleted.' });
+    res.json({ success: true, message: `✅ Accidentally redeemed lock cleared for customer (${customer}) on "${code}". Coupon reopened!` });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
