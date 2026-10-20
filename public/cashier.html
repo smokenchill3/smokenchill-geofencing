@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smoke N Chill — Cashier Portal</title>
+  <title>Smoke N Chill — Cashier Scanner</title>
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
@@ -18,13 +18,15 @@
 
     body {
       margin: 0;
-      padding: 15px;
+      padding: 20px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: var(--bg);
       color: var(--text);
       display: flex;
       flex-direction: column;
       align-items: center;
+      min-height: 100vh;
+      box-sizing: border-box;
     }
 
     .container {
@@ -33,9 +35,9 @@
     }
 
     h1 {
-      font-size: 1.4rem;
+      font-size: 1.5rem;
       text-align: center;
-      margin-bottom: 15px;
+      margin-bottom: 20px;
     }
 
     #reader {
@@ -43,7 +45,8 @@
       background: #000;
       border-radius: 12px;
       overflow: hidden;
-      margin-bottom: 15px;
+      margin-bottom: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     .manual-entry {
@@ -54,18 +57,19 @@
 
     input[type="text"] {
       flex: 1;
-      padding: 12px;
-      border-radius: 8px;
-      border: 1px solid rgba(255,255,255,0.2);
+      padding: 14px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
       background: #000;
       color: #fff;
       font-size: 1rem;
       text-transform: uppercase;
+      box-sizing: border-box;
     }
 
-    button {
-      padding: 12px 20px;
-      border-radius: 8px;
+    button.btn-redeem {
+      padding: 14px 24px;
+      border-radius: 10px;
       border: none;
       background: var(--accent);
       color: #fff;
@@ -74,19 +78,12 @@
       cursor: pointer;
     }
 
-    .btn-undo {
-      background: var(--danger);
-      margin-top: 10px;
-      width: 100%;
-      display: none;
-    }
-
     #result-box {
-      padding: 15px;
+      padding: 16px;
       border-radius: 12px;
       text-align: center;
       font-weight: bold;
-      font-size: 1.1rem;
+      font-size: 1.05rem;
       display: none;
       margin-bottom: 15px;
     }
@@ -102,6 +99,19 @@
       border: 1px solid var(--danger);
       color: #f87171;
     }
+
+    .btn-undo {
+      width: 100%;
+      padding: 14px;
+      border-radius: 10px;
+      border: none;
+      background: var(--danger);
+      color: #fff;
+      font-weight: bold;
+      font-size: 1rem;
+      cursor: pointer;
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -112,8 +122,8 @@
     <div id="reader"></div>
 
     <div class="manual-entry">
-      <input type="text" id="manual-code" placeholder="Enter Code (e.g. HMP10:cust_123)">
-      <button onclick="redeemManual()">Redeem</button>
+      <input type="text" id="manual-code" placeholder="ENTER CODE (E.G. HMP10:CUST_123)">
+      <button class="btn-redeem" onclick="redeemManual()">Redeem</button>
     </div>
 
     <div id="result-box"></div>
@@ -151,7 +161,7 @@
         box.style.display = 'block';
 
         if (data.success) {
-          box.className = 'result-box success';
+          box.className = 'success';
           box.innerText = data.message;
           undoBtn.style.display = 'block';
 
@@ -164,18 +174,17 @@
             lastCustomerId = 'general_customer';
           }
         } else {
-          box.className = 'result-box error';
+          box.className = 'error';
           box.innerText = data.message;
           undoBtn.style.display = 'none';
         }
       } catch (err) {
         box.style.display = 'block';
-        box.className = 'result-box error';
+        box.className = 'error';
         box.innerText = 'Server error occurred.';
       }
     }
 
-    // Cashier Instant Undo (No Admin Token Required)
     async function undoRedemption() {
       if (!lastRedeemedCode) return;
 
@@ -191,7 +200,7 @@
 
         const data = await res.json();
         if (data.success) {
-          box.className = 'result-box success';
+          box.className = 'success';
           box.innerText = data.message;
           undoBtn.style.display = 'none';
           lastRedeemedCode = '';
