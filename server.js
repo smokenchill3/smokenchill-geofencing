@@ -37,6 +37,7 @@ async function initDb() {
           code VARCHAR(50) UNIQUE NOT NULL,
           title VARCHAR(100) NOT NULL,
           discount_text VARCHAR(100) NOT NULL,
+          location VARCHAR(50) DEFAULT 'all',
           starts_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           expires_at TIMESTAMP DEFAULT '2026-12-31 23:59:59',
           is_active BOOLEAN DEFAULT TRUE,
@@ -67,6 +68,9 @@ async function initDb() {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    // Ensure location column exists if table was already created previously
+    await pool.query(`ALTER TABLE promotions ADD COLUMN IF NOT EXISTS location VARCHAR(50) DEFAULT 'all';`);
 
     const userCheck = await pool.query('SELECT * FROM users WHERE username = $1', ['admin']);
     if (userCheck.rows.length === 0) {
@@ -141,22 +145,23 @@ app.get('/api/promotions/all', async (req, res) => {
 });
 
 app.post('/api/admin/promotions/create', verifyAdminToken, async (req, res) => {
-  const { code, title, discountText, expiresAt } = req.body;
+  const { code, title, discountText, expiresAt, location } = req.body;
   if (!code || !title || !discountText) {
     return res.status(400).json({ success: false, message: 'Code, title, and discount text required.' });
   }
 
   const cleanCode = code.trim().toUpperCase();
   const expDate = expiresAt ? expiresAt : '2026-12-31 23:59:59';
+  const promoLocation = location ? location.trim().toLowerCase() : 'all';
 
   try {
     const result = await pool.query(
-      `INSERT INTO promotions (code, title, discount_text, expires_at, is_active)
-       VALUES ($1, $2, $3, $4, true)
+      `INSERT INTO promotions (code, title, discount_text, location, expires_at, is_active)
+       VALUES ($1, $2, $3, $4, $5, true)
        ON CONFLICT (code) DO UPDATE 
-       SET title = $2, discount_text = $3, expires_at = $4, is_active = true
+       SET title = $2, discount_text = $3, location = $4, expires_at = $5, is_active = true
        RETURNING *`,
-      [cleanCode, title.trim(), discountText.trim(), expDate]
+      [cleanCode, title.trim(), discountText.trim(), promoLocation, expDate]
     );
 
     io.emit('promoStateUpdated');
