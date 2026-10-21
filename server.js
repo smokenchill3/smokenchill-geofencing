@@ -299,9 +299,16 @@ app.get('/api/wallet/google/:code', async (req, res) => {
             redemptionChannel: 'INSTORE',
             title: offer.title,
             reviewStatus: 'APPROVED',
+            hexBackgroundColor: '#0f172a',
             logo: {
               sourceUri: {
                 uri: 'https://smokenchill-geofencing.onrender.com/Snc3-logo.png'
+              },
+              contentDescription: {
+                defaultValue: {
+                  language: 'en-US',
+                  value: 'Smoke N Chill Logo'
+                }
               }
             }
           }
