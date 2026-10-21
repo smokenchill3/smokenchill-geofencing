@@ -3,213 +3,686 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smoke N Chill — Cashier Scanner</title>
+  <title>Smoke N Chill - Cashier & Admin Portal</title>
   <script src="/socket.io/socket.io.js"></script>
-  <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
     :root {
-      --bg: #0f172a;
-      --card: #1e293b;
-      --accent: #22c55e;
-      --danger: #ef4444;
-      --text: #f8fafc;
-      --muted: #94a3b8;
+      --bg-dark: #0f1117;
+      --card-bg: #181b24;
+      --border-color: #2a2e3d;
+      --accent-green: #00e676;
+      --accent-green-hover: #00c853;
+      --danger-red: #ff5252;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
 
     body {
-      margin: 0;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      padding: 24px;
+      min-height: 100vh;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .header h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 20px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
       padding: 20px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    }
+
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .card-subtitle {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+    }
+
+    .form-group {
+      margin-bottom: 14px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+    }
+
+    input[type="text"],
+    input[type="password"],
+    input[type="date"],
+    select {
+      width: 100%;
+      padding: 12px 14px;
+      background: #0b0d12;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      color: #fff;
+      font-size: 0.95rem;
+      outline: none;
+    }
+
+    input:focus, select:focus {
+      border-color: var(--accent-green);
+    }
+
+    .btn {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 6px;
+      background: var(--accent-green);
+      color: #000;
+      font-weight: 700;
+      font-size: 0.95rem;
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: background 0.2s;
+    }
+
+    .btn:hover { background: var(--accent-green-hover); }
+
+    .btn-danger {
+      background: var(--danger-red);
+      color: #fff;
+      padding: 8px 12px;
+      font-size: 0.85rem;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .btn-secondary {
+      background: #2a2e3d;
+      color: #fff;
+      padding: 8px 12px;
+      font-size: 0.85rem;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .btn-secondary:hover { background: #3a3f52; }
+
+    .alert-status {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-align: center;
+      display: none;
+    }
+
+    .alert-success {
+      background: rgba(0, 230, 118, 0.15);
+      border: 1px solid var(--accent-green);
+      color: var(--accent-green);
+    }
+
+    .alert-error {
+      background: rgba(255, 82, 82, 0.15);
+      border: 1px solid var(--danger-red);
+      color: var(--danger-red);
+    }
+
+    .item-list {
       display: flex;
       flex-direction: column;
-      align-items: center;
-      min-height: 100vh;
-      box-sizing: border-box;
+      gap: 12px;
+      max-height: 320px;
+      overflow-y: auto;
     }
 
-    .container {
-      width: 100%;
-      max-width: 500px;
-    }
-
-    h1 {
-      font-size: 1.5rem;
-      text-align: center;
-      margin-bottom: 20px;
-    }
-
-    #reader {
-      width: 100%;
-      background: #000;
-      border-radius: 12px;
-      overflow: hidden;
-      margin-bottom: 20px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-    }
-
-    .manual-entry {
+    .list-item {
+      background: #0b0d12;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px;
       display: flex;
-      gap: 10px;
-      margin-bottom: 20px;
+      justify-content: space-between;
+      align-items: center;
     }
 
-    input[type="text"] {
-      flex: 1;
-      padding: 14px;
-      border-radius: 10px;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      background: #000;
-      color: #fff;
-      font-size: 1rem;
-      text-transform: uppercase;
-      box-sizing: border-box;
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      margin-left: 6px;
     }
-
-    button.btn-redeem {
-      padding: 14px 24px;
-      border-radius: 10px;
-      border: none;
-      background: var(--accent);
-      color: #fff;
-      font-weight: bold;
-      font-size: 1rem;
-      cursor: pointer;
-    }
-
-    #result-box {
-      padding: 16px;
-      border-radius: 12px;
-      text-align: center;
-      font-weight: bold;
-      font-size: 1.05rem;
-      display: none;
-      margin-bottom: 15px;
-    }
-
-    .success {
-      background: rgba(34, 197, 94, 0.2);
-      border: 1px solid var(--accent);
-      color: #4ade80;
-    }
-
-    .error {
-      background: rgba(239, 68, 68, 0.2);
-      border: 1px solid var(--danger);
-      color: #f87171;
-    }
-
-    .btn-undo {
-      width: 100%;
-      padding: 14px;
-      border-radius: 10px;
-      border: none;
-      background: var(--danger);
-      color: #fff;
-      font-weight: bold;
-      font-size: 1rem;
-      cursor: pointer;
-      display: none;
-    }
+    .badge-active { background: rgba(0, 230, 118, 0.2); color: var(--accent-green); }
+    .badge-disabled { background: rgba(148, 163, 184, 0.2); color: var(--text-muted); }
+    .badge-emergency { background: rgba(255, 82, 82, 0.2); color: var(--danger-red); }
   </style>
 </head>
 <body>
+  
+   <div class="header">
+   <h1>Smoke N Chill — Cashier & Admin Portal</h1>
+   <div style="display: flex; align-items: center; gap: 12px;">
+   <div id="sessionStatus" style="font-size: 0.85rem; color: var(--text-muted);">Status: Guest Mode</div>
+   <button id="logoutBtn" class="btn-danger" style="display: none; padding: 6px 12px; font-size: 0.8rem;"    onclick="handleLogout()">
+   🚪 Log Out
+   </button>
+  </div>
+</div>
 
-  <div class="container">
-    <h1>Smoke N Chill — Cashier Scanner</h1>
-
-    <div id="reader"></div>
-
-    <div class="manual-entry">
-      <input type="text" id="manual-code" placeholder="ENTER CODE (E.G. HMP10:CUST_123)">
-      <button class="btn-redeem" onclick="redeemManual()">Redeem</button>
+  <div class="grid">
+    <!-- Admin Login -->
+    <div class="card">
+      <div class="card-title">🔑 Admin / Manager Login</div>
+      <div class="card-subtitle">Log in to manage promotions, announcements, and users.</div>
+      
+      <form id="loginForm" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input type="text" id="username" placeholder="admin" required>
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" placeholder="••••••••" required>
+        </div>
+        <button type="submit" class="btn">Log In</button>
+      </form>
+      <div id="loginStatus" class="alert-status"></div>
     </div>
 
-    <div id="result-box"></div>
-    <button id="undo-btn" class="btn-undo" onclick="undoRedemption()">↩️ Undo Accidental Redemption</button>
+    <!-- Create Admin User -->
+    <div class="card">
+      <div class="card-title">👤 Create New Admin User</div>
+      <div class="card-subtitle">Create logins for shift managers.</div>
+      
+      <form id="createUserForm" onsubmit="handleCreateUser(event)">
+        <div class="form-group">
+          <label for="newUsername">New Username</label>
+          <input type="text" id="newUsername" placeholder="manager1" required>
+        </div>
+        <div class="form-group">
+          <label for="newPassword">New Password</label>
+          <input type="password" id="newPassword" placeholder="••••••••" required>
+        </div>
+        <button type="submit" class="btn">Create New User</button>
+      </form>
+      <div id="createUserStatus" class="alert-status"></div>
+    </div>
+
+    <!-- Scan / Redeem Coupon -->
+    <div class="card">
+      <div class="card-title">⚡ Scan / Redeem Coupon Code</div>
+      <div class="card-subtitle">Scan QR code or type promo code to redeem.</div>
+      
+      <form id="redeemForm" onsubmit="handleRedeem(event)">
+        <div class="form-group">
+          <label for="couponCode">Coupon Code or QR Scan</label>
+          <input type="text" id="couponCode" placeholder="Scan QR or enter code..." required autofocus>
+        </div>
+        <button type="submit" class="btn">Redeem Coupon</button>
+      </form>
+
+      <!-- Temporary Undo Last Scan Button (60s Window) -->
+      <div id="undoContainer" style="display: none; margin-top: 10px;">
+        <button type="button" class="btn-danger" style="width: 100%; padding: 12px; font-size: 0.9rem;" onclick="handleUndoScan()">
+          ↩️ Undo Last Scan (Accidental Scan)
+        </button>
+      </div>
+
+      <div id="redeemStatus" class="alert-status"></div>
+    </div>
+
+    <!-- Create New Promotion -->
+    <div class="card">
+      <div class="card-title">➕ Create New Promotion</div>
+      <div class="card-subtitle">Add a new deal that automatically syncs with PostgreSQL.</div>
+      
+      <form id="createPromoForm" onsubmit="handleCreatePromo(event)">
+        <div class="form-group">
+          <label for="promoCodeInput">Promo Code</label>
+          <input type="text" id="promoCodeInput" placeholder="e.g. GLASS15" required>
+        </div>
+        <div class="form-group">
+          <label for="promoTitleInput">Offer Title / Description</label>
+          <input type="text" id="promoTitleInput" placeholder="e.g. 15% Off All Glassware" required>
+        </div>
+        <div class="form-group">
+          <label for="promoBadgeInput">Badge Text</label>
+          <input type="text" id="promoBadgeInput" placeholder="e.g. 15% OFF" required>
+        </div>
+        <div class="form-group">
+          <label for="promoExpInput">Expiration Date (Optional)</label>
+          <input type="date" id="promoExpInput">
+        </div>
+        <button type="submit" class="btn">Save & Publish Promotion</button>
+      </form>
+      <div id="createPromoStatus" class="alert-status"></div>
+    </div>
+
+    <!-- Store Announcements & Emergency Notices -->
+    <div class="card">
+      <div class="card-title">📢 Post Store Announcement / Closure Notice</div>
+      <div class="card-subtitle">Broadcast emergency notices or upcoming offer newsletters.</div>
+      
+      <form id="announcementForm" onsubmit="handlePostAnnouncement(event)">
+        <div class="form-group">
+          <label for="annTitle">Title</label>
+          <input type="text" id="annTitle" placeholder="e.g. Winter Sale Coming!" required>
+        </div>
+        <div class="form-group">
+          <label for="annMessage">Message</label>
+          <input type="text" id="annMessage" placeholder="e.g. Enjoy 20% off all liquid items today..." required>
+        </div>
+        <div class="form-group">
+          <label for="annType">Notice Type</label>
+          <select id="annType">
+            <option value="info">General Announcement</option>
+            <option value="emergency">🚨 Emergency Store Closure</option>
+            <option value="upcoming">🎉 Upcoming Promotion</option>
+          </select>
+        </div>
+        <button type="submit" class="btn">Publish Notice</button>
+      </form>
+      <div id="annStatus" class="alert-status"></div>
+
+      <div style="margin-top: 16px;">
+        <h4 style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">Active Announcements</h4>
+        <div id="adminAnnouncementsList" class="item-list"></div>
+      </div>
+    </div>
+
+    <!-- Store Inventory Controls -->
+    <div class="card">
+      <div class="card-title">📦 Store Inventory Controls</div>
+      <div class="card-subtitle">Toggle stock state or delete promotions from PostgreSQL.</div>
+      
+      <div id="promoList" class="item-list"></div>
+    </div>
   </div>
 
   <script>
-    let lastRedeemedCode = '';
-    let lastCustomerId = '';
+    const socket = io();
+    let lastScannedData = null;
+    let undoTimeout = null;
 
-    const html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false);
-    html5QrcodeScanner.render(onScanSuccess);
+    document.addEventListener('DOMContentLoaded', () => {
+      updateSessionUI();
+      loadPromotions();
+      loadAdminAnnouncements();
+    });
 
-    function onScanSuccess(decodedText) {
-      processRedemption(decodedText);
+    socket.on('promoStateUpdated', loadPromotions);
+    socket.on('announcementsUpdated', loadAdminAnnouncements);
+
+    function getAuthToken() {
+      return localStorage.getItem('adminToken') || '';
     }
 
-    function redeemManual() {
-      const val = document.getElementById('manual-code').value.trim();
-      if (val) processRedemption(val);
+  function updateSessionUI() {
+  const token = getAuthToken();
+  const statusEl = document.getElementById('sessionStatus');
+  const logoutBtn = document.getElementById('logoutBtn');
+
+  if (token) {
+    statusEl.textContent = 'Status: Logged in as Admin';
+    statusEl.style.color = 'var(--accent-green)';
+    if (logoutBtn) logoutBtn.style.display = 'inline-block';
+  } else {
+    statusEl.textContent = 'Status: Guest Mode (Authentication Required)';
+    statusEl.style.color = 'var(--text-muted)';
+    if (logoutBtn) logoutBtn.style.display = 'none';
+   }
+ }
+
+  function handleLogout() {
+    // Clear stored JWT token
+    localStorage.removeItem('adminToken');
+  
+    // Clear any status messages
+    showStatus('loginStatus', 'Logged out successfully.', true);
+  
+     // Refresh header UI status
+     updateSessionUI();
     }
 
-    async function processRedemption(rawCode) {
-      const box = document.getElementById('result-box');
-      const undoBtn = document.getElementById('undo-btn');
+    function showStatus(elementId, message, isSuccess) {
+      const el = document.getElementById(elementId);
+      el.textContent = message;
+      el.className = `alert-status ${isSuccess ? 'alert-success' : 'alert-error'}`;
+      el.style.display = 'block';
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value.trim();
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+
+        if (data.success && data.token) {
+          localStorage.setItem('adminToken', data.token);
+          showStatus('loginStatus', 'Login successful!', true);
+          updateSessionUI();
+        } else {
+          showStatus('loginStatus', data.message || 'Login failed', false);
+        }
+      } catch (err) {
+        showStatus('loginStatus', 'Connection error.', false);
+      }
+    }
+
+    async function handleCreateUser(e) {
+      e.preventDefault();
+      const token = getAuthToken();
+      if (!token) return showStatus('createUserStatus', 'Admin login required.', false);
+
+      const newUsername = document.getElementById('newUsername').value.trim();
+      const newPassword = document.getElementById('newPassword').value.trim();
+
+      try {
+        const res = await fetch('/api/admin/add-user', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ newUsername, newPassword })
+        });
+        const data = await res.json();
+
+        showStatus('createUserStatus', data.message, data.success);
+        if (data.success) document.getElementById('createUserForm').reset();
+      } catch (err) {
+        showStatus('createUserStatus', 'Connection error.', false);
+      }
+    }
+
+    async function handleRedeem(e) {
+      e.preventDefault();
+      const input = document.getElementById('couponCode');
+      const rawValue = input.value.trim();
+
+      if (!rawValue) return;
 
       try {
         const res = await fetch('/api/redeem', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ couponCode: rawCode })
+          body: JSON.stringify({ couponCode: rawValue })
         });
-
         const data = await res.json();
-        box.style.display = 'block';
+
+        showStatus('redeemStatus', data.message, data.success);
+        input.value = '';
 
         if (data.success) {
-          box.className = 'success';
-          box.innerText = data.message;
-          undoBtn.style.display = 'block';
+          lastScannedData = { couponCode: rawValue };
+          document.getElementById('undoContainer').style.display = 'block';
 
-          if (rawCode.includes(':')) {
-            const parts = rawCode.split(':');
-            lastRedeemedCode = parts[0];
-            lastCustomerId = parts[1];
-          } else {
-            lastRedeemedCode = rawCode;
-            lastCustomerId = 'general_customer';
-          }
-        } else {
-          box.className = 'error';
-          box.innerText = data.message;
-          undoBtn.style.display = 'none';
+          if (undoTimeout) clearTimeout(undoTimeout);
+          undoTimeout = setTimeout(() => {
+            document.getElementById('undoContainer').style.display = 'none';
+            lastScannedData = null;
+          }, 60000);
         }
       } catch (err) {
-        box.style.display = 'block';
-        box.className = 'error';
-        box.innerText = 'Server error occurred.';
+        showStatus('redeemStatus', 'Redemption failed.', false);
       }
     }
 
-    async function undoRedemption() {
-      if (!lastRedeemedCode) return;
+    async function handleUndoScan() {
+      if (!lastScannedData) return;
 
-      const box = document.getElementById('result-box');
-      const undoBtn = document.getElementById('undo-btn');
+      const token = getAuthToken();
+      if (!token) return alert('Admin authentication required. Log in above.');
 
       try {
-        const res = await fetch('/api/cashier/reset-cooldown', {
+        const res = await fetch('/api/admin/reset-cooldown', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ couponCode: lastRedeemedCode, customerId: lastCustomerId })
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(lastScannedData)
+        });
+        const data = await res.json();
+
+        showStatus('redeemStatus', '↩️ Scan undone! Coupon reopened for this customer.', true);
+        document.getElementById('undoContainer').style.display = 'none';
+        lastScannedData = null;
+      } catch (err) {
+        showStatus('redeemStatus', 'Failed to undo scan.', false);
+      }
+    }
+
+    async function handleCreatePromo(e) {
+      e.preventDefault();
+      const token = getAuthToken();
+      if (!token) return showStatus('createPromoStatus', 'Admin login required.', false);
+
+      const code = document.getElementById('promoCodeInput').value;
+      const title = document.getElementById('promoTitleInput').value;
+      const discountText = document.getElementById('promoBadgeInput').value;
+      const expVal = document.getElementById('promoExpInput').value;
+      
+      const expiresAt = expVal ? `${expVal} 23:59:59` : '2026-12-31 23:59:59';
+
+      try {
+        const res = await fetch('/api/admin/promotions/create', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ code, title, discountText, expiresAt })
         });
 
         const data = await res.json();
+        showStatus('createPromoStatus', data.message, data.success);
+
         if (data.success) {
-          box.className = 'success';
-          box.innerText = data.message;
-          undoBtn.style.display = 'none';
-          lastRedeemedCode = '';
-          lastCustomerId = '';
-        } else {
-          alert('Failed to undo: ' + data.message);
+          document.getElementById('createPromoForm').reset();
+          loadPromotions();
         }
       } catch (err) {
-        alert('Server error executing undo.');
+        showStatus('createPromoStatus', 'Failed to save promotion to database.', false);
+      }
+    }
+
+    async function handlePostAnnouncement(e) {
+      e.preventDefault();
+      const token = getAuthToken();
+      if (!token) return showStatus('annStatus', 'Admin authentication required.', false);
+
+      const title = document.getElementById('annTitle').value.trim();
+      const message = document.getElementById('annMessage').value.trim();
+      const type = document.getElementById('annType').value;
+
+      try {
+        const res = await fetch('/api/admin/announcements', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ title, message, type })
+        });
+        const data = await res.json();
+
+        showStatus('annStatus', data.message, data.success);
+        if (data.success) {
+          document.getElementById('announcementForm').reset();
+          loadAdminAnnouncements();
+        }
+      } catch (err) {
+        showStatus('annStatus', 'Failed to publish announcement.', false);
+      }
+    }
+
+    async function loadAdminAnnouncements() {
+      try {
+        const res = await fetch('/api/announcements');
+        const data = await res.json();
+        const container = document.getElementById('adminAnnouncementsList');
+        container.innerHTML = '';
+
+        if (!data.success || data.announcements.length === 0) {
+          container.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted);">No active announcements.</p>';
+          return;
+        }
+
+        data.announcements.forEach(item => {
+          const div = document.createElement('div');
+          div.className = 'list-item';
+          const isEmergency = item.type === 'emergency';
+          div.innerHTML = `
+            <div>
+              <strong style="font-size:0.85rem; color:#fff;">${item.title}</strong>
+              <span class="badge ${isEmergency ? 'badge-emergency' : 'badge-active'}">${item.type.toUpperCase()}</span>
+              <p style="font-size:0.75rem; color:var(--text-muted);">${item.message}</p>
+            </div>
+            <button class="btn-danger" onclick="deleteAnnouncement(${item.id})">Remove</button>
+          `;
+          container.appendChild(div);
+        });
+      } catch (err) {
+        console.error('Failed loading announcements:', err);
+      }
+    }
+
+    async function deleteAnnouncement(id) {
+      const token = getAuthToken();
+      if (!token) return alert('Admin authentication required.');
+
+      try {
+        const res = await fetch('/api/admin/announcements/delete', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ id })
+        });
+        const data = await res.json();
+        alert(data.message);
+        if (data.success) loadAdminAnnouncements();
+      } catch (err) {
+        alert('Failed to delete announcement.');
+      }
+    }
+
+    async function loadPromotions() {
+      try {
+        const res = await fetch('/api/promotions/all');
+        const data = await res.json();
+        if (!data.success) return;
+
+        const container = document.getElementById('promoList');
+        container.innerHTML = '';
+
+        data.promotions.forEach(promo => {
+          const item = document.createElement('div');
+          item.className = 'list-item';
+
+          const expDate = new Date(promo.expires_at).toLocaleDateString();
+          const badgeClass = promo.is_active ? 'badge-active' : 'badge-disabled';
+          const badgeText = promo.is_active ? 'ACTIVE' : 'DISABLED';
+
+          item.innerHTML = `
+            <div>
+              <h4 style="font-size:0.9rem;">${promo.code} - ${promo.title} <span class="badge ${badgeClass}">${badgeText}</span></h4>
+              <p style="font-size:0.75rem; color:var(--text-muted);">Expires: ${expDate}</p>
+            </div>
+            <div style="display:flex; gap:6px;">
+              <button class="btn-secondary" onclick="togglePromo('${promo.code}', ${promo.is_active})">
+                ${promo.is_active ? 'Disable' : 'Enable'}
+              </button>
+              <button class="btn-danger" onclick="deletePromo('${promo.code}')">Delete</button>
+            </div>
+          `;
+          container.appendChild(item);
+        });
+      } catch (err) {
+        console.error('Error loading promotions:', err);
+      }
+    }
+
+    async function togglePromo(code, currentState) {
+      try {
+        await fetch('/api/promotions/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, is_active: !currentState })
+        });
+        loadPromotions();
+      } catch (err) {
+        alert('Failed to toggle promotion.');
+      }
+    }
+
+    async function deletePromo(code) {
+      if (!confirm(`Are you sure you want to delete promotion "${code}"?`)) return;
+
+      const token = getAuthToken();
+      if (!token) return alert('Admin authentication required. Log in first.');
+
+      try {
+        const res = await fetch('/api/promotions/delete', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ code })
+        });
+
+        const data = await res.json();
+        alert(data.message);
+        if (data.success) loadPromotions();
+      } catch (err) {
+        alert('Failed to delete promotion.');
       }
     }
   </script>
