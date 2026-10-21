@@ -116,6 +116,21 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// Admin User Creation (Protected)
+app.post('/api/admin/add-user', verifyAdminToken, async (req, res) => {
+  const { newUsername, newPassword } = req.body;
+  if (!newUsername || !newPassword) {
+    return res.status(400).json({ success: false, message: 'Username and password required.' });
+  }
+  try {
+    const hashed = await bcrypt.hash(newPassword, 10);
+    await pool.query('INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)', [newUsername.trim().toLowerCase(), hashed, 'admin']);
+    res.json({ success: true, message: `Manager account "${newUsername}" created successfully!` });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'User already exists or server error.' });
+  }
+});
+
 app.get('/api/promotions/all', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM promotions ORDER BY id DESC');
@@ -162,7 +177,8 @@ app.post('/api/promotions/toggle', async (req, res) => {
   }
 });
 
-app.post('/api/promotions/delete', verifyAdminToken, async (req, res) => {
+// Open to Cashiers: Delete Promotion without Admin Token
+app.post('/api/promotions/delete', async (req, res) => {
   const { code } = req.body;
   try {
     await pool.query('DELETE FROM promotions WHERE code = $1', [code]);
@@ -174,103 +190,45 @@ app.post('/api/promotions/delete', verifyAdminToken, async (req, res) => {
 });
 
 // ==============================================
-// Google Wallet API Integration
+// Announcements API Endpoints
 // ==============================================
-app.get('/api/wallet/google/:code', async (req, res) => {
-  const promoCode = req.params.code.toUpperCase();
-  const customerId = req.query.customerId || 'cust_' + Math.random().toString(36).substring(2, 10);
-
+app.get('/api/announcements', async (req, res) => {
   try {
-    const promo = await pool.query('SELECT * FROM promotions WHERE code = $1 AND is_active = true', [promoCode]);
-    if (promo.rows.length === 0) {
-      return res.status(404).send('Promotion not found or inactive.');
-    }
-
-    const offer = promo.rows[0];
-
-    if (!process.env.SERVICE_ACCOUNT_JSON) {
-      return res.status(500).send('Server configuration error: SERVICE_ACCOUNT_JSON is missing.');
-    }
-
-    const serviceAccount = JSON.parse(process.env.SERVICE_ACCOUNT_JSON);
-    const issuerId = process.env.GOOGLE_ISSUER_ID || '3388000000023201282';
-    const classId = `${issuerId}.smokenchill_${promoCode.toLowerCase()}`;
-    const objectId = `${issuerId}.pass_${promoCode.toLowerCase()}_${Date.now()}`;
-
-    const passPayload = {
-      iss: serviceAccount.client_email,
-      aud: 'google',
-      origins: ['https://smokenchill-geofencing.onrender.com'],
-      typ: 'savetowallet',
-      payload: {
-        offerClasses: [
-          {
-            id: classId,
-            issuerName: 'Smoke N Chill',
-            provider: 'Smoke N Chill',
-            redemptionChannel: 'INSTORE',
-            title: offer.title,
-            reviewStatus: 'UNDER_REVIEW',
-            logo: {
-              sourceUri: {
-                uri: 'https://smokenchill-geofencing.onrender.com/Snc3-logo.png'
-              },
-              contentDescription: {
-                defaultValue: {
-                  language: 'en-US',
-                  value: 'Smoke N Chill Logo'
-                }
-              }
-            },
-            heroImage: {
-              sourceUri: {
-                uri: 'https://smokenchill-geofencing.onrender.com/Snc3-Entrance.jpg'
-              },
-              contentDescription: {
-                defaultValue: {
-                  language: 'en-US',
-                  value: 'Smoke N Chill Store'
-                }
-              }
-            }
-          }
-        ],
-        offerObjects: [
-          {
-            id: objectId,
-            classId: classId,
-            state: 'ACTIVE',
-            barcode: {
-              type: 'QR_CODE',
-              value: `${offer.code}:${customerId}`,
-              alternateText: offer.code
-            },
-            title: offer.title,
-            header: offer.discount_text,
-            textModulesData: [
-              {
-                header: 'Store Location',
-                body: 'Smoke N Chill — Austin, TX'
-              },
-              {
-                header: 'Terms',
-                body: '1 redemption per customer every 24 hours.'
-              }
-            ]
-          }
-        ]
-      }
-    };
-
-    const token = jwt.sign(passPayload, serviceAccount.private_key, { algorithm: 'RS256' });
-    res.redirect(`https://pay.google.com/gp/v/save/${token}`);
+    const result = await pool.query('SELECT * FROM announcements ORDER BY id DESC');
+    res.json({ success: true, announcements: result.rows });
   } catch (err) {
-    console.error('[Google Wallet Error]:', err);
-    res.status(500).send(`Failed to generate Google Wallet Pass: ${err.message}`);
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// Coupon Status Check (Handles 24hr Cooldown for Web & Google Wallet)
+app.post('/api/admin/announcements', verifyAdminToken, async (req, res) => {
+  const { title, message, type } = req.body;
+  if (!title || !message) {
+    return res.status(400).json({ success: false, message: 'Title and message required.' });
+  }
+  try {
+    await pool.query('INSERT INTO announcements (title, message, type) VALUES ($1, $2, $3)', [title.trim(), message.trim(), type || 'info']);
+    io.emit('announcementsUpdated');
+    res.json({ success: true, message: 'Announcement published successfully!' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/admin/announcements/delete', verifyAdminToken, async (req, res) => {
+  const { id } = req.body;
+  try {
+    await pool.query('DELETE FROM announcements WHERE id = $1', [id]);
+    io.emit('announcementsUpdated');
+    res.json({ success: true, message: 'Announcement removed.' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ==============================================
+// Coupon Status Check (Handles 24hr Cooldown)
+// ==============================================
 app.get('/api/coupon-status', async (req, res) => {
   const { code, customerId } = req.query;
   if (!code) return res.json({ redeemed: false });
@@ -298,7 +256,7 @@ app.get('/api/coupon-status', async (req, res) => {
   }
 });
 
-// Redeem Coupon (Cashier Scan or Portal Redeem)
+// Redeem Coupon with Austin Time Zone 24hr Cooldown
 app.post('/api/redeem', async (req, res) => {
   const { couponCode, customerId } = req.body;
   if (!couponCode) return res.status(400).json({ success: false, message: '❌ Coupon code required.' });
@@ -333,7 +291,6 @@ app.post('/api/redeem', async (req, res) => {
       const lastRedeemed = new Date(cooldownCheck.rows[0].redeemed_at);
       const nextAvailable = new Date(lastRedeemed.getTime() + 24 * 60 * 60 * 1000);
       
-      // Explicitly format to Austin, Texas time zone
       const timeString = nextAvailable.toLocaleTimeString('en-US', {
         timeZone: 'America/Chicago',
         hour: 'numeric',

@@ -439,57 +439,54 @@
       }
     }
 
-    async function handleRedeem(e) {
-      e.preventDefault();
-      const input = document.getElementById('couponCode');
-      const rawValue = input.value.trim();
+  async function handleRedeem(e) {
+  e.preventDefault();
+  const input = document.getElementById('couponCode');
+  const rawValue = input.value.trim();
 
-      if (!rawValue) return;
+  if (!rawValue) return;
 
-      try {
-        const res = await fetch('/api/redeem', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ couponCode: rawValue })
-        });
-        const data = await res.json();
+  try {
+    const res = await fetch('/api/redeem', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ couponCode: rawValue })
+    });
+    const data = await res.json();
 
-        showStatus('redeemStatus', data.message, data.success);
-        input.value = '';
+    // Displays the exact server response message containing your Austin formatted time string
+    showStatus('redeemStatus', data.message, data.success);
+    input.value = '';
 
-        if (data.success) {
-          lastScannedData = { couponCode: rawValue };
-          document.getElementById('undoContainer').style.display = 'block';
+    if (data.success) {
+      lastScannedData = { couponCode: rawValue };
+      document.getElementById('undoContainer').style.display = 'block';
 
-          if (undoTimeout) clearTimeout(undoTimeout);
-          undoTimeout = setTimeout(() => {
-            document.getElementById('undoContainer').style.display = 'none';
-            lastScannedData = null;
-          }, 60000);
-        }
-      } catch (err) {
-        showStatus('redeemStatus', 'Redemption failed.', false);
-      }
+      if (undoTimeout) clearTimeout(undoTimeout);
+      undoTimeout = setTimeout(() => {
+        document.getElementById('undoContainer').style.display = 'none';
+        lastScannedData = null;
+      }, 60000);
     }
+  } catch (err) {
+    showStatus('redeemStatus', 'Redemption failed.', false);
+  }
+}
 
-    async function handleUndoScan() {
+   async function handleUndoScan() {
       if (!lastScannedData) return;
 
-      const token = getAuthToken();
-      if (!token) return alert('Admin authentication required. Log in above.');
-
       try {
-        const res = await fetch('/api/admin/reset-cooldown', {
+        const res = await fetch('/api/cashier/reset-cooldown', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify(lastScannedData)
         });
         const data = await res.json();
 
-        showStatus('redeemStatus', '↩️ Scan undone! Coupon reopened for this customer.', true);
+        showStatus('redeemStatus', data.message, data.success);
         document.getElementById('undoContainer').style.display = 'none';
         lastScannedData = null;
       } catch (err) {
@@ -650,41 +647,38 @@
     }
 
     async function togglePromo(code, currentState) {
-      try {
-        await fetch('/api/promotions/toggle', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code, is_active: !currentState })
-        });
-        loadPromotions();
-      } catch (err) {
-        alert('Failed to toggle promotion.');
-      }
-    }
+  try {
+    await fetch('/api/promotions/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, is_active: !currentState })
+    });
+    loadPromotions();
+  } catch (err) {
+    alert('Failed to toggle promotion.');
+  }
+}
 
-    async function deletePromo(code) {
-      if (!confirm(`Are you sure you want to delete promotion "${code}"?`)) return;
+async function deletePromo(code) {
+  if (!confirm(`Are you sure you want to delete promotion "${code}"?`)) return;
 
-      const token = getAuthToken();
-      if (!token) return alert('Admin authentication required. Log in first.');
+  try {
+    const res = await fetch('/api/promotions/delete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+        // Removed token requirement so cashiers can delete codes directly
+      },
+      body: JSON.stringify({ code })
+    });
 
-      try {
-        const res = await fetch('/api/promotions/delete', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ code })
-        });
-
-        const data = await res.json();
-        alert(data.message);
-        if (data.success) loadPromotions();
-      } catch (err) {
-        alert('Failed to delete promotion.');
-      }
-    }
+    const data = await res.json();
+    alert(data.message);
+    if (data.success) loadPromotions();
+  } catch (err) {
+    alert('Failed to delete promotion.');
+  }
+}
   </script>
 </body>
 </html>
