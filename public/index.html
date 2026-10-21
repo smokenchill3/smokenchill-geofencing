@@ -15,6 +15,7 @@
       --muted: #94a3b8;
       --danger: #ef4444;
       --warning: #facc15;
+      --info: #3b82f6;
     }
 
     body {
@@ -84,6 +85,37 @@
       max-width: 600px;
       padding: 15px 15px 30px 15px;
       box-sizing: border-box;
+    }
+
+    /* Announcements Banner Styles */
+    #announcements-container {
+      width: 100%;
+      margin-bottom: 15px;
+    }
+
+    .announcement-card {
+      background-color: rgba(59, 130, 246, 0.12);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      border-radius: 12px;
+      padding: 14px 18px;
+      margin-bottom: 12px;
+      text-align: left;
+    }
+
+    .announcement-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #60a5fa;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .announcement-message {
+      font-size: 0.85rem;
+      color: var(--text);
+      line-height: 1.4;
     }
 
     .promo-card {
@@ -174,8 +206,14 @@
     <p class="subtitle">Show QR code to cashier or add to your Google Wallet</p>
   </header>
 
-  <div class="container" id="promotions-list">
-    <p style="text-align: center; color: var(--muted);">Loading location-specific deals...</p>
+  <div class="container">
+    <!-- Announcements Banner Section -->
+    <div id="announcements-container"></div>
+
+    <!-- Promotions List Section -->
+    <div id="promotions-list">
+      <p style="text-align: center; color: var(--muted);">Loading location-specific deals...</p>
+    </div>
   </div>
 
   <script>
@@ -229,13 +267,16 @@
 
         activeStoreKey = distParmer < distResearch ? 'parmer' : 'research';
         updateLocationHeader();
+        loadAnnouncements();
         loadPromotions();
       }, () => {
         updateLocationHeader();
+        loadAnnouncements();
         loadPromotions();
       });
     } else {
       updateLocationHeader();
+      loadAnnouncements();
       loadPromotions();
     }
 
@@ -244,7 +285,32 @@
       banner.textContent = `📍 ${STORES[activeStoreKey].name}`;
     }
 
-    // 5. Fetch and Filter Promotions
+    // 5. Fetch and Render Announcements
+    async function loadAnnouncements() {
+      const annContainer = document.getElementById('announcements-container');
+      try {
+        const res = await fetch('/api/announcements');
+        const data = await res.json();
+
+        if (data.success && data.announcements && data.announcements.length > 0) {
+          const activeAnnouncements = data.announcements.filter(a => a.is_active);
+          if (activeAnnouncements.length > 0) {
+            annContainer.innerHTML = activeAnnouncements.map(ann => `
+              <div class="announcement-card">
+                <div class="announcement-title">📢 ${escapeHtml(ann.title)}</div>
+                <div class="announcement-message">${escapeHtml(ann.message)}</div>
+              </div>
+            `).join('');
+            return;
+          }
+        }
+        annContainer.innerHTML = '';
+      } catch (err) {
+        console.error('Failed to load announcements:', err);
+      }
+    }
+
+    // 6. Fetch and Filter Promotions
     async function loadPromotions() {
       const container = document.getElementById('promotions-list');
 
@@ -282,7 +348,6 @@
           const qrCanvasId = `qr-${promo.code}`;
           const walletUrl = `/api/wallet/google/${encodeURIComponent(promo.code)}?customerId=${encodeURIComponent(customerId)}`;
 
-          // Format exact unlock time in Austin time (America/Chicago)
           let cooldownText = '🔒 Redeemed today. Unlocks in 24 hours.';
           if (statusData.unlocks_at) {
             const unlockTime = new Date(statusData.unlocks_at).toLocaleTimeString('en-US', {
@@ -335,6 +400,7 @@
       );
     }
 
+    // Socket Event Listeners
     socket.on('couponRedeemed', (data) => {
       if (data.customerId.toLowerCase() === customerId.toLowerCase()) {
         const card = document.getElementById(`card-${data.couponCode}`);
@@ -358,6 +424,10 @@
 
     socket.on('promoStateUpdated', () => {
       loadPromotions();
+    });
+
+    socket.on('announcementsUpdated', () => {
+      loadAnnouncements();
     });
   </script>
 </body>
