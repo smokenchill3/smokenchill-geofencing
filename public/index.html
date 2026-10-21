@@ -282,6 +282,18 @@
           const qrCanvasId = `qr-${promo.code}`;
           const walletUrl = `/api/wallet/google/${encodeURIComponent(promo.code)}?customerId=${encodeURIComponent(customerId)}`;
 
+          // Format exact unlock time in Austin time (America/Chicago)
+          let cooldownText = '🔒 Redeemed today. Unlocks in 24 hours.';
+          if (statusData.unlocks_at) {
+            const unlockTime = new Date(statusData.unlocks_at).toLocaleTimeString('en-US', {
+              timeZone: 'America/Chicago',
+              hour: 'numeric',
+              minute: '2-digit',
+              hour12: true
+            });
+            cooldownText = `🔒 Redeemed today. Unlocks tomorrow at ${unlockTime}.`;
+          }
+
           card.innerHTML = `
             <div class="promo-title">${escapeHtml(promo.title)}</div>
             <div class="promo-discount">${escapeHtml(promo.discount_text)}</div>
@@ -298,7 +310,7 @@
             </a>
 
             <div class="cooldown-badge" id="cooldown-${promo.code}">
-              🔒 Redeemed today. Unlocks in 24 hours.
+              ${cooldownText}
             </div>
           `;
 
@@ -326,8 +338,20 @@
     socket.on('couponRedeemed', (data) => {
       if (data.customerId.toLowerCase() === customerId.toLowerCase()) {
         const card = document.getElementById(`card-${data.couponCode}`);
+        const cooldownBadge = document.getElementById(`cooldown-${data.couponCode}`);
+        
         if (card) {
           card.classList.add('locked');
+        }
+
+        if (cooldownBadge && data.unlocksAt) {
+          const unlockTime = new Date(data.unlocksAt).toLocaleTimeString('en-US', {
+            timeZone: 'America/Chicago',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true
+          });
+          cooldownBadge.textContent = `🔒 Redeemed today. Unlocks tomorrow at ${unlockTime}.`;
         }
       }
     });
