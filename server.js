@@ -293,7 +293,7 @@ app.get('/api/wallet/google/:code', async (req, res) => {
             provider: 'Smoke N Chill',
             redemptionChannel: 'INSTORE',
             title: offer.title,
-            reviewStatus: 'UNDER_REVIEW',
+            reviewStatus: 'APPROVED',
             logo: {
               sourceUri: {
                 uri: 'https://smokenchill-geofencing.onrender.com/Snc3-logo.png'
