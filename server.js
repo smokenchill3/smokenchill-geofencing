@@ -256,6 +256,86 @@ app.get('/api/coupon-status', async (req, res) => {
   }
 });
 
+// ==============================================
+// Google Wallet API Integration
+// ==============================================
+app.get('/api/wallet/google/:code', async (req, res) => {
+  const promoCode = req.params.code.toUpperCase();
+  const customerId = req.query.customerId || 'cust_' + Math.random().toString(36).substring(2, 10);
+
+  try {
+    const promo = await pool.query('SELECT * FROM promotions WHERE UPPER(TRIM(code)) = $1 AND is_active = true', [promoCode]);
+    if (promo.rows.length === 0) {
+      return res.status(404).send('Promotion not found or inactive.');
+    }
+
+    const offer = promo.rows[0];
+
+    if (!process.env.SERVICE_ACCOUNT_JSON) {
+      return res.status(500).send('Server configuration error: SERVICE_ACCOUNT_JSON is missing.');
+    }
+
+    const serviceAccount = JSON.parse(process.env.SERVICE_ACCOUNT_JSON);
+    const issuerId = process.env.GOOGLE_ISSUER_ID || '3388000000023201282';
+    const classId = `${issuerId}.smokenchill_${promoCode.toLowerCase()}`;
+    const objectId = `${issuerId}.pass_${promoCode.toLowerCase()}_${Date.now()}`;
+
+    const passPayload = {
+      iss: serviceAccount.client_email,
+      aud: 'google',
+      origins: ['https://smokenchill-geofencing.onrender.com'],
+      typ: 'savetowallet',
+      payload: {
+        offerClasses: [
+          {
+            id: classId,
+            issuerName: 'Smoke N Chill',
+            provider: 'Smoke N Chill',
+            redemptionChannel: 'INSTORE',
+            title: offer.title,
+            reviewStatus: 'UNDER_REVIEW',
+            logo: {
+              sourceUri: {
+                uri: 'https://smokenchill-geofencing.onrender.com/Snc3-logo.png'
+              }
+            }
+          }
+        ],
+        offerObjects: [
+          {
+            id: objectId,
+            classId: classId,
+            state: 'ACTIVE',
+            barcode: {
+              type: 'QR_CODE',
+              value: `${offer.code}:${customerId}`,
+              alternateText: offer.code
+            },
+            title: offer.title,
+            header: offer.discount_text,
+            textModulesData: [
+              {
+                header: 'Store Location',
+                body: 'Smoke N Chill — Austin, TX'
+              },
+              {
+                header: 'Terms',
+                body: '1 redemption per customer every 24 hours.'
+              }
+            ]
+          }
+        ]
+      }
+    };
+
+    const token = jwt.sign(passPayload, serviceAccount.private_key, { algorithm: 'RS256' });
+    res.redirect(`https://pay.google.com/gp/v/save/${token}`);
+  } catch (err) {
+    console.error('[Google Wallet Error]:', err);
+    res.status(500).send(`Failed to generate Google Wallet Pass: ${err.message}`);
+  }
+});
+
 // Redeem Coupon with Austin Time Zone 24hr Cooldown
 app.post('/api/redeem', async (req, res) => {
   const { couponCode, customerId } = req.body;
