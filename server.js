@@ -124,11 +124,29 @@ app.post('/api/auth/login', async (req, res) => {
 // User Management Endpoints
 // ==============================================
 
-// List all registered accounts
+// List all registered accounts (Admin Only)
 app.get('/api/admin/users', verifyAdminToken, async (req, res) => {
   try {
     const result = await pool.query('SELECT id, username, role, created_at FROM users ORDER BY id DESC');
     res.json({ success: true, users: result.rows });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Delete a staff/manager account (Admin Only)
+app.post('/api/admin/users/delete', verifyAdminToken, async (req, res) => {
+  const { id } = req.body;
+  if (!id) return res.status(400).json({ success: false, message: 'User ID required.' });
+
+  try {
+    // Prevent deleting the primary admin account (ID 1)
+    if (id === 1) {
+      return res.status(400).json({ success: false, message: 'Cannot delete the primary admin account.' });
+    }
+
+    await pool.query('DELETE FROM users WHERE id = $1', [id]);
+    res.json({ success: true, message: 'Staff account successfully removed.' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
