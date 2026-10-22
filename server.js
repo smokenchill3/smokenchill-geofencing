@@ -120,15 +120,35 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// Admin User Creation (Protected)
+// ==============================================
+// User Management Endpoints
+// ==============================================
+
+// List all registered accounts
+app.get('/api/admin/users', verifyAdminToken, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT id, username, role, created_at FROM users ORDER BY id DESC');
+    res.json({ success: true, users: result.rows });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Admin User Creation (Supports optional role parameter)
 app.post('/api/admin/add-user', verifyAdminToken, async (req, res) => {
-  const { newUsername, newPassword } = req.body;
+  const { newUsername, newPassword, role } = req.body;
   if (!newUsername || !newPassword) {
     return res.status(400).json({ success: false, message: 'Username and password required.' });
   }
+
+  const userRole = (role || 'shift_manager').trim().toLowerCase();
+
   try {
     const hashed = await bcrypt.hash(newPassword, 10);
-    await pool.query('INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)', [newUsername.trim().toLowerCase(), hashed, 'admin']);
+    await pool.query(
+      'INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)',
+      [newUsername.trim().toLowerCase(), hashed, userRole]
+    );
     res.json({ success: true, message: `Manager account "${newUsername}" created successfully!` });
   } catch (err) {
     res.status(500).json({ success: false, message: 'User already exists or server error.' });

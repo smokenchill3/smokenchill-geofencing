@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smoke N Chill - Cashier & Admin Portal</title>
+  <title>Smoke N Chill — Cashier & Admin Portal</title>
   <script src="/socket.io/socket.io.js"></script>
   <style>
     :root {
@@ -100,7 +100,7 @@
     input:focus, select:focus {
       border-color: var(--accent-green);
     }
-
+   
     .btn {
       width: 100%;
       padding: 12px;
@@ -200,7 +200,7 @@
    <h1>Smoke N Chill — Cashier & Admin Portal</h1>
    <div style="display: flex; align-items: center; gap: 12px;">
    <div id="sessionStatus" style="font-size: 0.85rem; color: var(--text-muted);">Status: Guest Mode</div>
-   <button id="logoutBtn" class="btn-danger" style="display: none; padding: 6px 12px; font-size: 0.8rem;"    onclick="handleLogout()">
+   <button id="logoutBtn" class="btn-danger" style="display: none; padding: 6px 12px; font-size: 0.8rem;" onclick="handleLogout()">
    🚪 Log Out
    </button>
   </div>
@@ -243,6 +243,15 @@
         <button type="submit" class="btn">Create New User</button>
       </form>
       <div id="createUserStatus" class="alert-status"></div>
+    </div>
+
+    <!-- Staff & Manager Accounts -->
+    <div class="card">
+      <div class="card-title">👥 Staff & Manager Accounts</div>
+      <div class="card-subtitle">Active system users and assigned roles.</div>
+      <div id="usersList" class="item-list">
+        <p style="font-size:0.8rem; color:var(--text-muted);">Log in as admin to view accounts.</p>
+      </div>
     </div>
 
     <!-- Scan / Redeem Coupon -->
@@ -354,31 +363,50 @@
       return localStorage.getItem('adminToken') || '';
     }
 
-  function updateSessionUI() {
-  const token = getAuthToken();
-  const statusEl = document.getElementById('sessionStatus');
-  const logoutBtn = document.getElementById('logoutBtn');
+    function parseJwt(token) {
+      try {
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+          return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+        return JSON.parse(jsonPayload);
+      } catch (e) {
+        return null;
+      }
+    }
 
-  if (token) {
-    statusEl.textContent = 'Status: Logged in as Admin';
-    statusEl.style.color = 'var(--accent-green)';
-    if (logoutBtn) logoutBtn.style.display = 'inline-block';
-  } else {
-    statusEl.textContent = 'Status: Guest Mode (Authentication Required)';
-    statusEl.style.color = 'var(--text-muted)';
-    if (logoutBtn) logoutBtn.style.display = 'none';
-   }
- }
+    function updateSessionUI() {
+      const token = getAuthToken();
+      const statusEl = document.getElementById('sessionStatus');
+      const logoutBtn = document.getElementById('logoutBtn');
 
-  function handleLogout() {
-    // Clear stored JWT token
-    localStorage.removeItem('adminToken');
-  
-    // Clear any status messages
-    showStatus('loginStatus', 'Logged out successfully.', true);
-  
-     // Refresh header UI status
-     updateSessionUI();
+      if (token) {
+        const payload = parseJwt(token);
+        const username = payload && payload.username ? payload.username : 'Admin';
+        const role = payload && payload.role ? payload.role.replace('_', ' ').toUpperCase() : 'ADMIN';
+
+        statusEl.textContent = `Status: Logged in as ${username} (${role})`;
+        statusEl.style.color = 'var(--accent-green)';
+        if (logoutBtn) logoutBtn.style.display = 'inline-block';
+        
+        loadUsersList();
+      } else {
+        statusEl.textContent = 'Status: Guest Mode (Authentication Required)';
+        statusEl.style.color = 'var(--text-muted)';
+        if (logoutBtn) logoutBtn.style.display = 'none';
+        
+        const userContainer = document.getElementById('usersList');
+        if (userContainer) {
+          userContainer.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted);">Log in as admin to view accounts.</p>';
+        }
+      }
+    }
+
+    function handleLogout() {
+      localStorage.removeItem('adminToken');
+      showStatus('loginStatus', 'Logged out successfully.', true);
+      updateSessionUI();
     }
 
     function showStatus(elementId, message, isSuccess) {
@@ -386,6 +414,43 @@
       el.textContent = message;
       el.className = `alert-status ${isSuccess ? 'alert-success' : 'alert-error'}`;
       el.style.display = 'block';
+    }
+
+    async function loadUsersList() {
+      const token = getAuthToken();
+      const container = document.getElementById('usersList');
+      if (!container || !token) return;
+
+      try {
+        const res = await fetch('/api/admin/users', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+
+        if (!data.success || !data.users || data.users.length === 0) {
+          container.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted);">No accounts found.</p>';
+          return;
+        }
+
+        container.innerHTML = '';
+        data.users.forEach(user => {
+          const div = document.createElement('div');
+          div.className = 'list-item';
+          const roleName = user.role === 'shift_manager' ? 'Shift Manager' : 'Admin';
+          const roleBadge = user.role === 'shift_manager' ? 'badge-disabled' : 'badge-active';
+
+          div.innerHTML = `
+            <div>
+              <strong style="font-size:0.85rem; color:#fff;">${user.username}</strong>
+              <span class="badge ${roleBadge}">${roleName.toUpperCase()}</span>
+              <p style="font-size:0.75rem; color:var(--text-muted);">Created: ${new Date(user.created_at).toLocaleDateString()}</p>
+            </div>
+          `;
+          container.appendChild(div);
+        });
+      } catch (err) {
+        container.innerHTML = '<p style="font-size:0.8rem; color:var(--danger-red);">Failed to load accounts.</p>';
+      }
     }
 
     async function handleLogin(e) {
@@ -433,55 +498,55 @@
         const data = await res.json();
 
         showStatus('createUserStatus', data.message, data.success);
-        if (data.success) document.getElementById('createUserForm').reset();
+        if (data.success) {
+          document.getElementById('createUserForm').reset();
+          loadUsersList();
+        }
       } catch (err) {
         showStatus('createUserStatus', 'Connection error.', false);
       }
     }
 
-  async function handleRedeem(e) {
-  e.preventDefault();
-  const input = document.getElementById('couponCode');
-  const rawValue = input.value.trim();
+    async function handleRedeem(e) {
+      e.preventDefault();
+      const input = document.getElementById('couponCode');
+      const rawValue = input.value.trim();
 
-  if (!rawValue) return;
+      if (!rawValue) return;
 
-  try {
-    const res = await fetch('/api/redeem', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ couponCode: rawValue })
-    });
-    const data = await res.json();
+      try {
+        const res = await fetch('/api/redeem', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ couponCode: rawValue })
+        });
+        const data = await res.json();
 
-    // Displays the exact server response message containing your Austin formatted time string
-    showStatus('redeemStatus', data.message, data.success);
-    input.value = '';
+        showStatus('redeemStatus', data.message, data.success);
+        input.value = '';
 
-    if (data.success) {
-      lastScannedData = { couponCode: rawValue };
-      document.getElementById('undoContainer').style.display = 'block';
+        if (data.success) {
+          lastScannedData = { couponCode: rawValue };
+          document.getElementById('undoContainer').style.display = 'block';
 
-      if (undoTimeout) clearTimeout(undoTimeout);
-      undoTimeout = setTimeout(() => {
-        document.getElementById('undoContainer').style.display = 'none';
-        lastScannedData = null;
-      }, 60000);
+          if (undoTimeout) clearTimeout(undoTimeout);
+          undoTimeout = setTimeout(() => {
+            document.getElementById('undoContainer').style.display = 'none';
+            lastScannedData = null;
+          }, 60000);
+        }
+      } catch (err) {
+        showStatus('redeemStatus', 'Redemption failed.', false);
+      }
     }
-  } catch (err) {
-    showStatus('redeemStatus', 'Redemption failed.', false);
-  }
-}
 
-   async function handleUndoScan() {
+    async function handleUndoScan() {
       if (!lastScannedData) return;
 
       try {
         const res = await fetch('/api/cashier/reset-cooldown', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(lastScannedData)
         });
         const data = await res.json();
@@ -647,38 +712,35 @@
     }
 
     async function togglePromo(code, currentState) {
-  try {
-    await fetch('/api/promotions/toggle', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, is_active: !currentState })
-    });
-    loadPromotions();
-  } catch (err) {
-    alert('Failed to toggle promotion.');
-  }
-}
+      try {
+        await fetch('/api/promotions/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, is_active: !currentState })
+        });
+        loadPromotions();
+      } catch (err) {
+        alert('Failed to toggle promotion.');
+      }
+    }
 
-async function deletePromo(code) {
-  if (!confirm(`Are you sure you want to delete promotion "${code}"?`)) return;
+    async function deletePromo(code) {
+      if (!confirm(`Are you sure you want to delete promotion "${code}"?`)) return;
 
-  try {
-    const res = await fetch('/api/promotions/delete', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-        // Removed token requirement so cashiers can delete codes directly
-      },
-      body: JSON.stringify({ code })
-    });
+      try {
+        const res = await fetch('/api/promotions/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code })
+        });
 
-    const data = await res.json();
-    alert(data.message);
-    if (data.success) loadPromotions();
-  } catch (err) {
-    alert('Failed to delete promotion.');
-  }
-}
+        const data = await res.json();
+        alert(data.message);
+        if (data.success) loadPromotions();
+      } catch (err) {
+        alert('Failed to delete promotion.');
+      }
+    }
   </script>
 </body>
 </html>
