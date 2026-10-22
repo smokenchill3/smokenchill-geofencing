@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smoke N Chill — Counter Flyers (Print Ready)</title>
+  <style>
+    :root {
+      --bg-color: #0b0f19;
+      --card-bg: #151d2a;
+      --accent: #22c55e;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --warning: #facc15;
+      --danger: #ef4444;
+      --border: rgba(34, 197, 94, 0.3);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .print-controls {
+      margin-bottom: 25px;
+      text-align: center;
+    }
+
+    .btn-print {
+      background-color: var(--accent);
+      color: #000000;
+      font-size: 1.1rem;
+      font-weight: 800;
+      padding: 12px 28px;
+      border: none;
+      border-radius: 30px;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(34, 197, 94, 0.4);
+      transition: transform 0.2s, background 0.2s;
+    }
+
+    .btn-print:hover {
+      transform: scale(1.05);
+      background-color: #16a34a;
+    }
+
+    .flyers-container {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 30px;
+      max-width: 1100px;
+      width: 100%;
+    }
+
+    .flyer {
+      background: linear-gradient(145deg, #131b28, #0d121c);
+      border: 2px solid var(--border);
+      border-radius: 20px;
+      padding: 30px 25px;
+      width: 480px;
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      position: relative;
+    }
+
+    .brand-title {
+      font-size: 2rem;
+      font-weight: 900;
+      letter-spacing: 2px;
+      margin: 0;
+      color: #ffffff;
+      text-transform: uppercase;
+      text-shadow: 0 0 10px rgba(34, 197, 94, 0.3);
+    }
+
+    .brand-subtitle {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--accent);
+      margin: 4px 0 15px 0;
+      letter-spacing: 1px;
+    }
+
+    .store-badge {
+      background-color: rgba(34, 197, 94, 0.15);
+      color: var(--accent);
+      border: 1.5px solid var(--accent);
+      padding: 8px 18px;
+      border-radius: 25px;
+      font-size: 1.1rem;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+
+    .store-address {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-bottom: 15px;
+      font-weight: 500;
+    }
+
+    .age-badge {
+      background-color: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      padding: 6px 14px;
+      border-radius: 18px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      margin-bottom: 20px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .qr-frame {
+      background-color: #ffffff;
+      padding: 15px;
+      border-radius: 16px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+      margin-bottom: 18px;
+    }
+
+    .qr-frame img {
+      display: block;
+      width: 220px;
+      height: 220px;
+    }
+
+    .scan-cta {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 20px;
+      line-height: 1.4;
+      padding: 0 10px;
+    }
+
+    .deals-list {
+      width: 100%;
+      background-color: rgba(255, 255, 255, 0.03);
+      border: 1px dashed rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      padding: 15px;
+      text-align: left;
+      margin-bottom: 15px;
+    }
+
+    .deals-title {
+      font-size: 0.85rem;
+      font-weight: 800;
+      color: var(--warning);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+
+    .deals-list ul {
+      margin: 0;
+      padding-left: 20px;
+      color: var(--text);
+      font-size: 0.88rem;
+    }
+
+    .deals-list li {
+      margin-bottom: 6px;
+    }
+
+    .wallet-callout {
+      font-size: 0.8rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 600;
+    }
+
+    /* Print Styles */
+    @media print {
+      body {
+        background-color: #ffffff;
+        color: #000000;
+        padding: 0;
+      }
+
+      .print-controls {
+        display: none;
+      }
+
+      .flyers-container {
+        gap: 0;
+        max-width: 100%;
+        display: block;
+      }
+
+      .flyer {
+        background: #ffffff !important;
+        border: 2px solid #000000 !important;
+        color: #000000 !important;
+        box-shadow: none !important;
+        width: 100% !important;
+        max-width: 500px !important;
+        margin: 0 auto 40px auto !important;
+        page-break-after: always;
+      }
+
+      .brand-title {
+        color: #000000 !important;
+        text-shadow: none !important;
+      }
+
+      .brand-subtitle {
+        color: #16a34a !important;
+      }
+
+      .store-badge {
+        background-color: #f0fdf4 !important;
+        color: #16a34a !important;
+        border-color: #16a34a !important;
+      }
+
+      .store-address {
+        color: #475569 !important;
+      }
+
+      .age-badge {
+        background-color: #fef2f2 !important;
+        color: #dc2626 !important;
+        border-color: #dc2626 !important;
+      }
+
+      .scan-cta {
+        color: #000000 !important;
+      }
+
+      .deals-list {
+        background-color: #f8fafc !important;
+        border: 1px solid #cbd5e1 !important;
+      }
+
+      .deals-title {
+        color: #ca8a04 !important;
+      }
+
+      .deals-list ul {
+        color: #000000 !important;
+      }
+
+      .wallet-callout {
+        color: #475569 !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="print-controls">
+    <button class="btn-print" onclick="window.print()">🖨️ Print Store Flyers</button>
+  </div>
+
+  <div class="flyers-container">
+
+    <!-- STORE 1: PARMER LN -->
+    <div class="flyer">
+      <h1 class="brand-title">Smoke N Chill</h1>
+      <div class="brand-subtitle">DAILY DEALS & WALLET PASSES</div>
+
+      <div class="store-badge">📍 Smoke N Chill #6</div>
+      <div class="store-address">1606 E Parmer LN Ste 160, Austin, TX 78753</div>
+
+      <div class="age-badge">🔞 MUST BE 21+ WITH VALID ID TO REDEEM</div>
+
+      <div class="qr-frame">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=https%3A%2F%2Fsmokenchill-geofencing.onrender.com%2F%3Fstore%3Dparmer" alt="Parmer Ln QR Code">
+      </div>
+
+      <div class="scan-cta">
+        📱 Scan with your phone camera to unlock Parmer Ln deals & save passes to Google Wallet!
+      </div>
+
+      <div class="deals-list">
+        <div class="deals-title">🔥 Daily Counter Specials</div>
+        <ul>
+          <li>Show active QR code to cashier at checkout</li>
+          <li>Instant Google Wallet pass installation</li>
+          <li>Exclusive 21+ store promotions updated daily</li>
+        </ul>
+      </div>
+
+      <div class="wallet-callout">
+        💳 Save deals directly to Google Wallet for easy tap-and-scan!
+      </div>
+    </div>
+
+    <!-- STORE 2: RESEARCH BLVD -->
+    <div class="flyer">
+      <h1 class="brand-title">Smoke N Chill</h1>
+      <div class="brand-subtitle">DAILY DEALS & WALLET PASSES</div>
+
+      <div class="store-badge">📍 Smoke N Chill #3</div>
+      <div class="store-address">11150 Research Blvd Ste 209, Austin, TX 78759</div>
+
+      <div class="age-badge">🔞 MUST BE 21+ WITH VALID ID TO REDEEM</div>
+
+      <div class="qr-frame">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=https%3A%2F%2Fsmokenchill-geofencing.onrender.com%2F%3Fstore%3Dresearch" alt="Research Blvd QR Code">
+      </div>
+
+      <div class="scan-cta">
+        📱 Scan with your phone camera to unlock Research Blvd deals & save passes to Google Wallet!
+      </div>
+
+      <div class="deals-list">
+        <div class="deals-title">🔥 Daily Counter Specials</div>
+        <ul>
+          <li>Show active QR code to cashier at checkout</li>
+          <li>Instant Google Wallet pass installation</li>
+          <li>Exclusive 21+ store promotions updated daily</li>
+        </ul>
+      </div>
+
+      <div class="wallet-callout">
+        💳 Save deals directly to Google Wallet for easy tap-and-scan!
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>
+```
+
+### To deploy and print:
+1. Save this file into your `public/` folder as `print-flyers.html`.
+2. Commit and push to Render:
+   ```bash
+   git add public/print-flyers.html
+   git commit -m "Add separate print-ready store flyers with updated addresses"
+   git push origin main
+   ```
+3. Open `https://smokenchill-geofencing.onrender.com/print-flyers.html` in your browser and click **🖨️ Print Store Flyers** to print each flyer cleanly on its own page!
+
+<FollowUp>
+Would you like me to add a direct link button to this printable flyers page on your Admin Dashboard (`admin.html`)?
+</FollowUp>
+
+<ElicitationsGroup>
+</ElicitationsGroup>
