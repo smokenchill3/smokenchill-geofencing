@@ -245,13 +245,6 @@
       <div id="createUserStatus" class="alert-status"></div>
     </div>
 
-    <!-- Staff & Manager Accounts (Visible Only When Logged In) -->
-    <div class="card" id="staffCard" style="display: none;">
-      <div class="card-title">👥 Staff & Manager Accounts</div>
-      <div class="card-subtitle">Active shift managers. Remove if a manager leaves.</div>
-      <div id="usersList" class="item-list"></div>
-    </div>
-
     <!-- Scan / Redeem Coupon -->
     <div class="card">
       <div class="card-title">⚡ Scan / Redeem Coupon Code</div>
@@ -378,7 +371,6 @@
       const token = getAuthToken();
       const statusEl = document.getElementById('sessionStatus');
       const logoutBtn = document.getElementById('logoutBtn');
-      const staffCard = document.getElementById('staffCard');
 
       if (token) {
         const payload = parseJwt(token);
@@ -388,13 +380,10 @@
         statusEl.textContent = `Status: Logged in as ${username} (${role})`;
         statusEl.style.color = 'var(--accent-green)';
         if (logoutBtn) logoutBtn.style.display = 'inline-block';
-        if (staffCard) staffCard.style.display = 'block';
-        loadUsersList();
       } else {
         statusEl.textContent = 'Status: Guest Mode (Authentication Required)';
         statusEl.style.color = 'var(--text-muted)';
         if (logoutBtn) logoutBtn.style.display = 'none';
-        if (staffCard) staffCard.style.display = 'none';
       }
     }
 
@@ -409,67 +398,6 @@
       el.textContent = message;
       el.className = `alert-status ${isSuccess ? 'alert-success' : 'alert-error'}`;
       el.style.display = 'block';
-    }
-
-    async function loadUsersList() {
-      const token = getAuthToken();
-      const container = document.getElementById('usersList');
-      if (!container || !token) return;
-
-      try {
-        const res = await fetch('/api/admin/users', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const data = await res.json();
-
-        if (!data.success || !data.users || data.users.length === 0) {
-          container.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted);">No accounts found.</p>';
-          return;
-        }
-
-        container.innerHTML = '';
-        data.users.forEach(user => {
-          const div = document.createElement('div');
-          div.className = 'list-item';
-          const roleName = user.role === 'shift_manager' ? 'Shift Manager' : 'Admin';
-          const roleBadge = user.role === 'shift_manager' ? 'badge-disabled' : 'badge-active';
-
-          div.innerHTML = `
-            <div>
-              <strong style="font-size:0.85rem; color:#fff;">${user.username}</strong>
-              <span class="badge ${roleBadge}">${roleName.toUpperCase()}</span>
-              <p style="font-size:0.75rem; color:var(--text-muted);">Created: ${new Date(user.created_at).toLocaleDateString()}</p>
-            </div>
-            ${user.id !== 1 ? `<button class="btn-danger" onclick="deleteUser(${user.id}, '${user.username}')">Remove</button>` : '<span style="font-size:0.75rem; color:var(--muted);">Primary</span>'}
-          `;
-          container.appendChild(div);
-        });
-      } catch (err) {
-        container.innerHTML = '<p style="font-size:0.8rem; color:var(--danger-red);">Failed to load accounts.</p>';
-      }
-    }
-
-    async function deleteUser(userId, username) {
-      if (!confirm(`Are you sure you want to remove access for "${username}"?`)) return;
-
-      const token = getAuthToken();
-      try {
-        const res = await fetch('/api/admin/users/delete', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ id: userId })
-        });
-        const data = await res.json();
-        alert(data.message);
-        if (data.success) {
-          loadUsersList();
-        }
-      } catch (err) {
-        alert('Failed to delete user account.');
-      }
     }
 
     async function handleLogin(e) {
@@ -519,7 +447,6 @@
         showStatus('createUserStatus', data.message, data.success);
         if (data.success) {
           document.getElementById('createUserForm').reset();
-          loadUsersList();
         }
       } catch (err) {
         showStatus('createUserStatus', 'Connection error.', false);
