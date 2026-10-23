@@ -6,6 +6,9 @@
   <title>Smoke N Chill — Deals & Wallet Passes</title>
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+  <!-- Firebase App & Auth SDKs (Compat version) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <style>
     :root {
       --bg-color: #0f172a;
@@ -210,6 +213,37 @@
     <!-- Announcements Banner Section -->
     <div id="announcements-container"></div>
 
+    <!-- Phone Verification Overlay/Card -->
+    <div id="phone-auth-container" class="promo-card" style="display: none;">
+      <div class="promo-title">📱 Verify Phone Number</div>
+      <p style="font-size: 0.85rem; color: var(--muted); margin-bottom: 12px;">
+        Verify your phone number once to permanently unlock daily Smoke N Chill coupons.
+      </p>
+
+      <!-- Invisible reCAPTCHA container required by Firebase -->
+      <div id="recaptcha-container"></div>
+
+      <!-- Step A: Enter Phone Number -->
+      <div id="phone-step-1" style="width: 100%;">
+        <input type="tel" id="userPhoneInput" placeholder="e.g. 5125550199" 
+               style="width:100%; padding:12px; background:#0b0d12; border:1px solid rgba(255,255,255,0.1); border-radius:8px; color:#fff; font-size:1rem; outline:none; margin-bottom:10px;">
+        <button onclick="sendFirebaseOTP()" class="wallet-btn" style="width:100%; text-align:center; background:var(--accent); color:#000; font-weight:700; border:none; cursor:pointer;">
+          📩 Send Verification SMS
+        </button>
+      </div>
+
+      <!-- Step B: Enter SMS Code -->
+      <div id="phone-step-2" style="display:none; width: 100%;">
+        <input type="number" id="otpCodeInput" placeholder="Enter 6-digit SMS code" 
+               style="width:100%; padding:12px; background:#0b0d12; border:1px solid rgba(255,255,255,0.1); border-radius:8px; color:#fff; font-size:1.2rem; text-align:center; outline:none; margin-bottom:10px;">
+        <button onclick="verifyFirebaseOTP()" class="wallet-btn" style="width:100%; text-align:center; background:var(--accent); color:#000; font-weight:700; border:none; cursor:pointer;">
+          ✅ Verify & Unlock Coupons
+        </button>
+      </div>
+
+      <div id="phoneAuthStatus" style="font-size:0.85rem; margin-top:10px;"></div>
+    </div>
+
     <!-- Promotions List Section -->
     <div id="promotions-list">
       <p style="text-align: center; color: var(--muted);">Loading location-specific deals...</p>
@@ -217,15 +251,21 @@
   </div>
 
   <script>
-    const socket = io();
-
-    // Store Coordinates (Austin, TX)
-    const STORES = {
-      research: { name: "Smoke N Chill #3 (Research Blvd)", lat: 30.4182, lon: -97.7475 },
-      parmer: { name: "Smoke N Chill #6 (Parmer Ln)", lat: 30.3992, lon: -97.6621 }
+    // Firebase Configuration[cite: 9]
+    const firebaseConfig = {
+      apiKey: "AIzaSyAfWfY-1gobPDtxqE3yKDin9SUj6I3NMEE",
+      authDomain: "smoke-n-chill-371f0.firebaseapp.com",
+      projectId: "smoke-n-chill-371f0",
+      storageBucket: "smoke-n-chill-371f0.firebasestorage.app",
+      messagingSenderId: "468672187298",
+      appId: "1:468672187298:web:4939dc2ebfc34918140fb"
     };
 
-    // 1. Persistent Customer Identification (localStorage + Cookie Fallback for iOS)
+    firebase.initializeApp(firebaseConfig);
+
+    let confirmationResult = null;
+
+    // Cookie & LocalStorage Helpers
     function getCookie(name) {
       const value = `; ${document.cookie}`;
       const parts = value.split(`; ${name}=`);
@@ -241,211 +281,273 @@
 
     let customerId = localStorage.getItem('snc_customer_id') || getCookie('snc_customer_id');
 
-    if (!customerId) {
-      customerId = 'cust_' + Math.random().toString(36).substring(2, 10);
-    }
-
-    // Always ensure both storage types stay synced
-    localStorage.setItem('snc_customer_id', customerId);
-    setCookie('snc_customer_id', customerId, 365);
-
-    // 2. Check for explicit URL parameter (e.g. index.html?store=parmer)
-    function getSelectedStore() {
-      const urlParams = new URLSearchParams(window.location.search);
-      const storeParam = urlParams.get('store');
-      if (storeParam && (storeParam.toLowerCase() === 'parmer' || storeParam.toLowerCase() === 'research')) {
-        return storeParam.toLowerCase();
+    document.addEventListener('DOMContentLoaded', () => {
+      // If user hasn't verified their phone number yet, show auth container
+      if (!customerId || !customerId.startsWith('phone_')) {
+        document.getElementById('phone-auth-container').style.display = 'flex';
+        window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+          'size': 'invisible'
+        });
+      } else {
+        initAppFlow();
       }
-      return null;
-    }
+    });
 
-    let activeStoreKey = getSelectedStore() || 'research';
+    async function sendFirebaseOTP() {
+      const rawPhone = document.getElementById('userPhoneInput').value.trim().replace(/\D/g, '');
+      const statusEl = document.getElementById('phoneAuthStatus');
 
-    // 3. Haversine Distance Formula
-    function calculateDistance(lat1, lon1, lat2, lon2) {
-      const R = 3958.8; // Miles
-      const dLat = (lat2 - lat1) * Math.PI / 180;
-      const dLon = (lon2 - lon1) * Math.PI / 180;
-      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                Math.sin(dLon / 2) * Math.sin(dLon / 2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      return R * c;
-    }
+      if (rawPhone.length < 10) {
+        statusEl.textContent = 'Please enter a valid 10-digit US phone number.';
+        return;
+      }
 
-    // 4. Geolocation Detection
-    if (navigator.geolocation && !getSelectedStore()) {
-      navigator.geolocation.getCurrentPosition((pos) => {
-        const userLat = pos.coords.latitude;
-        const userLon = pos.coords.longitude;
+      const formattedPhone = rawPhone.length === 10 ? `+1${rawPhone}` : `+${rawPhone}`;
+      statusEl.textContent = 'Sending SMS verification code...';
 
-        const distResearch = calculateDistance(userLat, userLon, STORES.research.lat, STORES.research.lon);
-        const distParmer = calculateDistance(userLat, userLon, STORES.parmer.lat, STORES.parmer.lon);
-
-        activeStoreKey = distParmer < distResearch ? 'parmer' : 'research';
-        updateLocationHeader();
-        loadAnnouncements();
-        loadPromotions();
-      }, () => {
-        updateLocationHeader();
-        loadAnnouncements();
-        loadPromotions();
-      });
-    } else {
-      updateLocationHeader();
-      loadAnnouncements();
-      loadPromotions();
-    }
-
-    function updateLocationHeader() {
-      const banner = document.getElementById('location-banner');
-      banner.textContent = `📍 ${STORES[activeStoreKey].name}`;
-    }
-
-    // 5. Fetch and Render Announcements
-    async function loadAnnouncements() {
-      const annContainer = document.getElementById('announcements-container');
       try {
-        const res = await fetch('/api/announcements');
-        const data = await res.json();
+        const appVerifier = window.recaptchaVerifier;
+        confirmationResult = await firebase.auth().signInWithPhoneNumber(formattedPhone, appVerifier);
+        statusEl.textContent = 'SMS sent! Enter the code below.';
+        document.getElementById('phone-step-1').style.display = 'none';
+        document.getElementById('phone-step-2').style.display = 'block';
+      } catch (err) {
+        console.error('Firebase Auth Error:', err);
+        statusEl.textContent = 'Failed to send SMS. Please try again.';
+      }
+    }
 
-        if (data.success && data.announcements && data.announcements.length > 0) {
-          const activeAnnouncements = data.announcements.filter(a => a.is_active);
-          if (activeAnnouncements.length > 0) {
-            annContainer.innerHTML = activeAnnouncements.map(ann => `
-              <div class="announcement-card">
-                <div class="announcement-title">📢 ${escapeHtml(ann.title)}</div>
-                <div class="announcement-message">${escapeHtml(ann.message)}</div>
-              </div>
-            `).join('');
+    async function verifyFirebaseOTP() {
+      const code = document.getElementById('otpCodeInput').value.trim();
+      const statusEl = document.getElementById('phoneAuthStatus');
+
+      if (!code || !confirmationResult) {
+        statusEl.textContent = 'Please enter the code received on your phone.';
+        return;
+      }
+
+      try {
+        const result = await confirmationResult.confirm(code);
+        const user = result.user;
+        const cleanPhone = user.phoneNumber.replace(/\D/g, '');
+
+        // Assign permanent bypass-proof phone ID
+        customerId = `phone_${cleanPhone}`;
+        localStorage.setItem('snc_customer_id', customerId);
+        setCookie('snc_customer_id', customerId, 365);
+
+        statusEl.textContent = 'Phone verified successfully!';
+        setTimeout(() => {
+          document.getElementById('phone-auth-container').style.display = 'none';
+          initAppFlow();
+        }, 1000);
+      } catch (err) {
+        statusEl.textContent = 'Incorrect verification code. Please try again.';
+      }
+    }
+
+    function initAppFlow() {
+      // Keep storage synced
+      if (customerId) {
+        localStorage.setItem('snc_customer_id', customerId);
+        setCookie('snc_customer_id', customerId, 365);
+      }
+
+      const socket = io();
+
+      // Store Coordinates (Austin, TX)
+      const STORES = {
+        research: { name: "Smoke N Chill #3 (Research Blvd)", lat: 30.4182, lon: -97.7475 },
+        parmer: { name: "Smoke N Chill #6 (Parmer Ln)", lat: 30.3992, lon: -97.6621 }
+      };
+
+      function getSelectedStore() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const storeParam = urlParams.get('store');
+        if (storeParam && (storeParam.toLowerCase() === 'parmer' || storeParam.toLowerCase() === 'research')) {
+          return storeParam.toLowerCase();
+        }
+        return null;
+      }
+
+      let activeStoreKey = getSelectedStore() || 'research';
+
+      function calculateDistance(lat1, lon1, lat2, lon2) {
+        const R = 3958.8; // Miles
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+      }
+
+      if (navigator.geolocation && !getSelectedStore()) {
+        navigator.geolocation.getCurrentPosition((pos) => {
+          const userLat = pos.coords.latitude;
+          const userLon = pos.coords.longitude;
+          const distResearch = calculateDistance(userLat, userLon, STORES.research.lat, STORES.research.lon);
+          const distParmer = calculateDistance(userLat, userLon, STORES.parmer.lat, STORES.parmer.lon);
+          activeStoreKey = distParmer < distResearch ? 'parmer' : 'research';
+          updateLocationHeader();
+          loadAnnouncements();
+          loadPromotions();
+        }, () => {
+          updateLocationHeader();
+          loadAnnouncements();
+          loadPromotions();
+        });
+      } else {
+        updateLocationHeader();
+        loadAnnouncements();
+        loadPromotions();
+      }
+
+      function updateLocationHeader() {
+        document.getElementById('location-banner').textContent = `📍 ${STORES[activeStoreKey].name}`;
+      }
+
+      async function loadAnnouncements() {
+        const annContainer = document.getElementById('announcements-container');
+        try {
+          const res = await fetch('/api/announcements');
+          const data = await res.json();
+          if (data.success && data.announcements && data.announcements.length > 0) {
+            const activeAnnouncements = data.announcements.filter(a => a.is_active);
+            if (activeAnnouncements.length > 0) {
+              annContainer.innerHTML = activeAnnouncements.map(ann => `
+                <div class="announcement-card">
+                  <div class="announcement-title">📢 ${escapeHtml(ann.title)}</div>
+                  <div class="announcement-message">${escapeHtml(ann.message)}</div>
+                </div>
+              `).join('');
+              return;
+            }
+          }
+          annContainer.innerHTML = '';
+        } catch (err) {
+          console.error('Failed to load announcements:', err);
+        }
+      }
+
+      async function loadPromotions() {
+        const container = document.getElementById('promotions-list');
+        try {
+          const res = await fetch('/api/promotions/all');
+          const data = await res.json();
+
+          if (!data.success || !data.promotions || data.promotions.length === 0) {
+            container.innerHTML = '<p style="text-align:center; color: var(--muted);">No active promotions available today.</p>';
             return;
           }
+
+          const locationPromos = data.promotions.filter(p => {
+            if (!p.is_active) return false;
+            if (!p.location) return true;
+            const loc = p.location.toLowerCase();
+            return loc === activeStoreKey || loc === 'all';
+          });
+
+          if (locationPromos.length === 0) {
+            container.innerHTML = `<p style="text-align:center; color: var(--muted);">No specific deals active for ${STORES[activeStoreKey].name} today.</p>`;
+            return;
+          }
+
+          container.innerHTML = '';
+
+          for (const promo of locationPromos) {
+            const statusRes = await fetch(`/api/coupon-status?code=${encodeURIComponent(promo.code)}&customerId=${encodeURIComponent(customerId)}`);
+            const statusData = await statusRes.json();
+
+            const card = document.createElement('div');
+            card.className = `promo-card ${statusData.redeemed ? 'locked' : ''}`;
+            card.id = `card-${promo.code}`;
+
+            const qrCanvasId = `qr-${promo.code}`;
+            const walletUrl = `/api/wallet/google/${encodeURIComponent(promo.code)}?customerId=${encodeURIComponent(customerId)}`;
+
+            let cooldownText = '🔒 Redeemed today. Unlocks in 24 hours.';
+            if (statusData.unlocks_at) {
+              const unlockTime = new Date(statusData.unlocks_at).toLocaleTimeString('en-US', {
+                timeZone: 'America/Chicago',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+              });
+              cooldownText = `🔒 Redeemed today. Unlocks tomorrow at ${unlockTime}.`;
+            }
+
+            card.innerHTML = `
+              <div class="promo-title">${escapeHtml(promo.title)}</div>
+              <div class="promo-discount">${escapeHtml(promo.discount_text)}</div>
+              
+              <div class="qr-container">
+                <canvas id="${qrCanvasId}"></canvas>
+              </div>
+
+              <a href="${walletUrl}" class="wallet-btn" target="_blank">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="#22c55e" style="margin-right: 8px;">
+                  <path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
+                </svg>
+                Add to Google Wallet
+              </a>
+
+              <div class="cooldown-badge" id="cooldown-${promo.code}">
+                ${cooldownText}
+              </div>
+            `;
+
+            container.appendChild(card);
+
+            if (!statusData.redeemed) {
+              setTimeout(() => {
+                const qrValue = `${promo.code}:${customerId}`;
+                QRCode.toCanvas(document.getElementById(qrCanvasId), qrValue, { width: 180, margin: 1 });
+              }, 50);
+            }
+          }
+        } catch (err) {
+          console.error('Failed to load deals:', err);
+          container.innerHTML = '<p style="text-align:center; color: var(--danger);">Failed to load promotions. Please try again later.</p>';
         }
-        annContainer.innerHTML = '';
-      } catch (err) {
-        console.error('Failed to load announcements:', err);
       }
-    }
 
-    // 6. Fetch and Filter Promotions
-    async function loadPromotions() {
-      const container = document.getElementById('promotions-list');
+      function escapeHtml(str) {
+        return str.replace(/[&<>'"]/g, 
+          tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+        );
+      }
 
-      try {
-        const res = await fetch('/api/promotions/all');
-        const data = await res.json();
+      socket.on('couponRedeemed', (data) => {
+        if (data.customerId.toLowerCase() === customerId.toLowerCase()) {
+          const card = document.getElementById(`card-${data.couponCode}`);
+          const cooldownBadge = document.getElementById(`cooldown-${data.couponCode}`);
+          
+          if (card) {
+            card.classList.add('locked');
+          }
 
-        if (!data.success || !data.promotions || data.promotions.length === 0) {
-          container.innerHTML = '<p style="text-align:center; color: var(--muted);">No active promotions available today.</p>';
-          return;
-        }
-
-        const locationPromos = data.promotions.filter(p => {
-          if (!p.is_active) return false;
-          if (!p.location) return true;
-          const loc = p.location.toLowerCase();
-          return loc === activeStoreKey || loc === 'all';
-        });
-
-        if (locationPromos.length === 0) {
-          container.innerHTML = `<p style="text-align:center; color: var(--muted);">No specific deals active for ${STORES[activeStoreKey].name} today.</p>`;
-          return;
-        }
-
-        container.innerHTML = '';
-
-        for (const promo of locationPromos) {
-          const statusRes = await fetch(`/api/coupon-status?code=${encodeURIComponent(promo.code)}&customerId=${encodeURIComponent(customerId)}`);
-          const statusData = await statusRes.json();
-
-          const card = document.createElement('div');
-          card.className = `promo-card ${statusData.redeemed ? 'locked' : ''}`;
-          card.id = `card-${promo.code}`;
-
-          const qrCanvasId = `qr-${promo.code}`;
-          const walletUrl = `/api/wallet/google/${encodeURIComponent(promo.code)}?customerId=${encodeURIComponent(customerId)}`;
-
-          let cooldownText = '🔒 Redeemed today. Unlocks in 24 hours.';
-          if (statusData.unlocks_at) {
-            const unlockTime = new Date(statusData.unlocks_at).toLocaleTimeString('en-US', {
+          if (cooldownBadge && data.unlocksAt) {
+            const unlockTime = new Date(data.unlocksAt).toLocaleTimeString('en-US', {
               timeZone: 'America/Chicago',
               hour: 'numeric',
               minute: '2-digit',
               hour12: true
             });
-            cooldownText = `🔒 Redeemed today. Unlocks tomorrow at ${unlockTime}.`;
-          }
-
-          card.innerHTML = `
-            <div class="promo-title">${escapeHtml(promo.title)}</div>
-            <div class="promo-discount">${escapeHtml(promo.discount_text)}</div>
-            
-            <div class="qr-container">
-              <canvas id="${qrCanvasId}"></canvas>
-            </div>
-
-            <a href="${walletUrl}" class="wallet-btn" target="_blank">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="#22c55e" style="margin-right: 8px;">
-                <path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
-              </svg>
-              Add to Google Wallet
-            </a>
-
-            <div class="cooldown-badge" id="cooldown-${promo.code}">
-              ${cooldownText}
-            </div>
-          `;
-
-          container.appendChild(card);
-
-          if (!statusData.redeemed) {
-            setTimeout(() => {
-              const qrValue = `${promo.code}:${customerId}`;
-              QRCode.toCanvas(document.getElementById(qrCanvasId), qrValue, { width: 180, margin: 1 });
-            }, 50);
+            cooldownBadge.textContent = `🔒 Redeemed today. Unlocks tomorrow at ${unlockTime}.`;
           }
         }
-      } catch (err) {
-        console.error('Failed to load deals:', err);
-        container.innerHTML = '<p style="text-align:center; color: var(--danger);">Failed to load promotions. Please try again later.</p>';
-      }
+      });
+
+      socket.on('promoStateUpdated', () => {
+        loadPromotions();
+      });
+
+      socket.on('announcementsUpdated', () => {
+        loadAnnouncements();
+      });
     }
-
-    function escapeHtml(str) {
-      return str.replace(/[&<>'"]/g, 
-        tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
-      );
-    }
-
-    // Socket Event Listeners
-    socket.on('couponRedeemed', (data) => {
-      if (data.customerId.toLowerCase() === customerId.toLowerCase()) {
-        const card = document.getElementById(`card-${data.couponCode}`);
-        const cooldownBadge = document.getElementById(`cooldown-${data.couponCode}`);
-        
-        if (card) {
-          card.classList.add('locked');
-        }
-
-        if (cooldownBadge && data.unlocksAt) {
-          const unlockTime = new Date(data.unlocksAt).toLocaleTimeString('en-US', {
-            timeZone: 'America/Chicago',
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true
-          });
-          cooldownBadge.textContent = `🔒 Redeemed today. Unlocks tomorrow at ${unlockTime}.`;
-        }
-      }
-    });
-
-    socket.on('promoStateUpdated', () => {
-      loadPromotions();
-    });
-
-    socket.on('announcementsUpdated', () => {
-      loadAnnouncements();
-    });
   </script>
 </body>
 </html>
