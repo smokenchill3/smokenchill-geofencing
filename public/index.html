@@ -251,7 +251,7 @@
   </div>
 
   <script>
-    // Firebase Configuration[cite: 9]
+    // Firebase Configuration
     const firebaseConfig = {
       apiKey: "AIzaSyAfWfY-1gobPDtxqE3yKDin9SUj6I3NMEE",
       authDomain: "smoke-n-chill-371f0.firebaseapp.com",
@@ -313,7 +313,7 @@
         document.getElementById('phone-step-2').style.display = 'block';
       } catch (err) {
         console.error('Firebase Auth Error:', err);
-        statusEl.textContent = 'Failed to send SMS. Please try again.';
+        statusEl.textContent = `Error: ${err.message}`;
       }
     }
 
