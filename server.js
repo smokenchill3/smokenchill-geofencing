@@ -336,7 +336,7 @@ app.get('/api/wallet/google/:code', async (req, res) => {
             provider: 'Smoke N Chill',
             redemptionChannel: 'INSTORE',
             title: offer.title,
-            reviewStatus: 'APPROVED',
+            reviewStatus: 'UNDER_REVIEW',
             hexBackgroundColor: '#0f172a',
             logo: {
               sourceUri: {
