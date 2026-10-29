@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smoke N Chill — Cashier Scanner</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --accent: #22c55e;
+      --danger: #ef4444;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+    }
+
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      box-sizing: border-box;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 500px;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    #reader {
+      width: 100%;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .manual-entry {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      padding: 14px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: #000;
+      color: #fff;
+      font-size: 1rem;
+      text-transform: uppercase;
+      box-sizing: border-box;
+    }
+
+    button.btn-redeem {
+      padding: 14px 24px;
+      border-radius: 10px;
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      font-weight: bold;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+
+    #result-box {
+      padding: 16px;
+      border-radius: 12px;
+      text-align: center;
+      font-weight: bold;
+      font-size: 1.05rem;
+      display: none;
+      margin-bottom: 15px;
+    }
+
+    .success {
+      background: rgba(34, 197, 94, 0.2);
+      border: 1px solid var(--accent);
+      color: #4ade80;
+    }
+
+    .error {
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid var(--danger);
+      color: #f87171;
+    }
+
+    .btn-undo {
+      width: 100%;
+      padding: 14px;
+      border-radius: 10px;
+      border: none;
+      background: var(--danger);
+      color: #fff;
+      font-weight: bold;
+      font-size: 1rem;
+      cursor: pointer;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1>Smoke N Chill — Cashier Scanner</h1>
+
+    <div id="reader"></div>
+
+    <div class="manual-entry">
+      <input type="text" id="manual-code" placeholder="ENTER CODE (E.G. HMP10:CUST_123)">
+      <button class="btn-redeem" onclick="redeemManual()">Redeem</button>
+    </div>
+
+    <div id="result-box"></div>
+    <button id="undo-btn" class="btn-undo" onclick="undoRedemption()">↩️ Undo Accidental Redemption</button>
+  </div>
+
+  <script>
+    let lastRedeemedCode = '';
+    let lastCustomerId = '';
+
+    const html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false);
+    html5QrcodeScanner.render(onScanSuccess);
+
+    function onScanSuccess(decodedText) {
+      processRedemption(decodedText);
+    }
+
+    function redeemManual() {
+      const val = document.getElementById('manual-code').value.trim();
+      if (val) processRedemption(val);
+    }
+
+    async function processRedemption(rawCode) {
+      const box = document.getElementById('result-box');
+      const undoBtn = document.getElementById('undo-btn');
+
+      try {
+        const res = await fetch('/api/redeem', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ couponCode: rawCode })
+        });
+
+        const data = await res.json();
+        box.style.display = 'block';
+
+        if (data.success) {
+          box.className = 'success';
+          box.innerText = data.message;
+          undoBtn.style.display = 'block';
+
+          if (rawCode.includes(':')) {
+            const parts = rawCode.split(':');
+            lastRedeemedCode = parts[0];
+            lastCustomerId = parts[1];
+          } else {
+            lastRedeemedCode = rawCode;
+            lastCustomerId = 'general_customer';
+          }
+        } else {
+          box.className = 'error';
+          box.innerText = data.message;
+          undoBtn.style.display = 'none';
+        }
+      } catch (err) {
+        box.style.display = 'block';
+        box.className = 'error';
+        box.innerText = 'Server error occurred.';
+      }
+    }
+
+    async function undoRedemption() {
+      if (!lastRedeemedCode) return;
+
+      const box = document.getElementById('result-box');
+      const undoBtn = document.getElementById('undo-btn');
+
+      try {
+        const res = await fetch('/api/cashier/reset-cooldown', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ couponCode: lastRedeemedCode, customerId: lastCustomerId })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          box.className = 'success';
+          box.innerText = data.message;
+          undoBtn.style.display = 'none';
+          lastRedeemedCode = '';
+          lastCustomerId = '';
+        } else {
+          alert('Failed to undo: ' + data.message);
+        }
+      } catch (err) {
+        alert('Server error executing undo.');
+      }
+    }
+  </script>
+</body>
+</html>

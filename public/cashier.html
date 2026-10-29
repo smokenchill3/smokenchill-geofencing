@@ -203,7 +203,7 @@
    <button id="logoutBtn" class="btn-danger" style="display: none; padding: 6px 12px; font-size: 0.8rem;" onclick="handleLogout()">
    🚪 Log Out
    </button>
-  </div>
+ </div>
 </div>
 
   <div class="grid">
@@ -243,6 +243,12 @@
         <button type="submit" class="btn">Create New User</button>
       </form>
       <div id="createUserStatus" class="alert-status"></div>
+
+      <!-- Shift Managers List (Visible to Admin Only) -->
+      <div id="adminManagerListSection" style="display: none; margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 16px;">
+        <h4 style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">Active Shift Managers (<span id="managerCount">0</span>)</h4>
+        <div id="shiftManagerList" class="item-list"></div>
+      </div>
     </div>
 
     <!-- Scan / Redeem Coupon -->
@@ -345,6 +351,7 @@
       updateSessionUI();
       loadPromotions();
       loadAdminAnnouncements();
+      loadShiftManagers();
     });
 
     socket.on('promoStateUpdated', loadPromotions);
@@ -371,6 +378,7 @@
       const token = getAuthToken();
       const statusEl = document.getElementById('sessionStatus');
       const logoutBtn = document.getElementById('logoutBtn');
+      const managerSection = document.getElementById('adminManagerListSection');
 
       if (token) {
         const payload = parseJwt(token);
@@ -380,10 +388,13 @@
         statusEl.textContent = `Status: Logged in as ${username} (${role})`;
         statusEl.style.color = 'var(--accent-green)';
         if (logoutBtn) logoutBtn.style.display = 'inline-block';
+        if (managerSection) managerSection.style.display = 'block';
+        loadShiftManagers();
       } else {
         statusEl.textContent = 'Status: Guest Mode (Authentication Required)';
         statusEl.style.color = 'var(--text-muted)';
         if (logoutBtn) logoutBtn.style.display = 'none';
+        if (managerSection) managerSection.style.display = 'none';
       }
     }
 
@@ -447,9 +458,77 @@
         showStatus('createUserStatus', data.message, data.success);
         if (data.success) {
           document.getElementById('createUserForm').reset();
+          loadShiftManagers();
         }
       } catch (err) {
         showStatus('createUserStatus', 'Connection error.', false);
+      }
+    }
+
+    async function loadShiftManagers() {
+      const token = getAuthToken();
+      const container = document.getElementById('shiftManagerList');
+      const countEl = document.getElementById('managerCount');
+      if (!container || !token) return;
+
+      try {
+        const res = await fetch('/api/admin/users', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+
+        if (!data.success || !data.users) {
+          container.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted);">No managers found.</p>';
+          countEl.textContent = '0';
+          return;
+        }
+
+        container.innerHTML = '';
+        countEl.textContent = data.users.length;
+
+        if (data.users.length === 0) {
+          container.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted);">No shift manager accounts created yet.</p>';
+          return;
+        }
+
+        data.users.forEach(user => {
+          const div = document.createElement('div');
+          div.className = 'list-item';
+          div.innerHTML = `
+            <div>
+              <strong style="font-size:0.85rem; color:#fff;">${user.username}</strong>
+              <span class="badge badge-active">${user.role ? user.role.toUpperCase() : 'MANAGER'}</span>
+            </div>
+            <button class="btn-danger" onclick="deleteShiftManager('${user.username}')">Delete</button>
+          `;
+          container.appendChild(div);
+        });
+      } catch (err) {
+        console.error('Failed loading shift managers:', err);
+      }
+    }
+
+    async function deleteShiftManager(username) {
+      const token = getAuthToken();
+      if (!token) return alert('Admin authentication required.');
+      if (!confirm(`Are you sure you want to delete manager account "${username}"?`)) return;
+
+      try {
+        const res = await fetch('/api/admin/delete-user', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ username })
+        });
+        const data = await res.json();
+        alert(data.message);
+        if (data.success) {
+          loadShiftManagers();
+        }
+      } catch (err) {
+        alert('Failed to delete manager account.');
       }
     }
 
