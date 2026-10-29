@@ -124,10 +124,10 @@ app.post('/api/auth/login', async (req, res) => {
 // User Management Endpoints
 // ==============================================
 
-// List all registered accounts (Admin Only)
+// List all registered accounts (Admin Only - excludes primary admin)
 app.get('/api/admin/users', verifyAdminToken, async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, username, role, created_at FROM users ORDER BY id DESC');
+    const result = await pool.query("SELECT id, username, role, created_at FROM users WHERE LOWER(username) != 'admin' ORDER BY id DESC");
     res.json({ success: true, users: result.rows });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -142,7 +142,6 @@ app.post('/api/admin/delete-user', verifyAdminToken, async (req, res) => {
   }
 
   try {
-    // Prevent deleting the primary admin account
     if (username.trim().toLowerCase() === 'admin') {
       return res.status(403).json({ success: false, message: 'Cannot delete the primary admin account.' });
     }
