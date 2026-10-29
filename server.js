@@ -134,19 +134,26 @@ app.get('/api/admin/users', verifyAdminToken, async (req, res) => {
   }
 });
 
-// Delete a staff/manager account (Admin Only)
-app.post('/api/admin/users/delete', verifyAdminToken, async (req, res) => {
-  const { id } = req.body;
-  if (!id) return res.status(400).json({ success: false, message: 'User ID required.' });
+// Delete a staff/manager account by username (Admin Only)
+app.post('/api/admin/delete-user', verifyAdminToken, async (req, res) => {
+  const { username } = req.body;
+  if (!username) {
+    return res.status(400).json({ success: false, message: 'Username required.' });
+  }
 
   try {
-    // Prevent deleting the primary admin account (ID 1)
-    if (id === 1) {
-      return res.status(400).json({ success: false, message: 'Cannot delete the primary admin account.' });
+    // Prevent deleting the primary admin account
+    if (username.trim().toLowerCase() === 'admin') {
+      return res.status(403).json({ success: false, message: 'Cannot delete the primary admin account.' });
     }
 
-    await pool.query('DELETE FROM users WHERE id = $1', [id]);
-    res.json({ success: true, message: 'Staff account successfully removed.' });
+    const result = await pool.query('DELETE FROM users WHERE LOWER(username) = LOWER($1)', [username.trim()]);
+    
+    if (result.rowCount === 0) {
+      return res.status(404).json({ success: false, message: 'Manager account not found.' });
+    }
+
+    res.json({ success: true, message: `Manager account "${username}" deleted successfully.` });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
