@@ -181,6 +181,21 @@
       margin-bottom: 6px;
     }
 
+    .no-double-badge {
+      width: 100%;
+      background-color: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #f87171;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 0.88rem;
+      font-weight: 800;
+      margin-bottom: 15px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      text-align: center;
+    }
+
     .wallet-callout {
       font-size: 0.8rem;
       color: var(--muted);
@@ -261,6 +276,12 @@
         color: #000000 !important;
       }
 
+      .no-double-badge {
+        background-color: #fef2f2 !important;
+        color: #dc2626 !important;
+        border: 1px solid #dc2626 !important;
+      }
+
       .wallet-callout {
         color: #475569 !important;
       }
@@ -302,6 +323,10 @@
         </ul>
       </div>
 
+      <div class="no-double-badge">
+        ⚠️ No Double Discount.
+      </div>
+
       <div class="wallet-callout">
         💳 Save deals directly to Google Wallet for easy tap-and-scan!
       </div>
@@ -334,6 +359,10 @@
         </ul>
       </div>
 
+      <div class="no-double-badge">
+        ⚠️ No Double Discount.
+      </div>
+
       <div class="wallet-callout">
         💳 Save deals directly to Google Wallet for easy tap-and-scan!
       </div>
@@ -343,21 +372,3 @@
 
 </body>
 </html>
-```
-
-### To deploy and print:
-1. Save this file into your `public/` folder as `print-flyers.html`.
-2. Commit and push to Render:
-   ```bash
-   git add public/print-flyers.html
-   git commit -m "Add separate print-ready store flyers with updated addresses"
-   git push origin main
-   ```
-3. Open `https://smokenchill-geofencing.onrender.com/print-flyers.html` in your browser and click **🖨️ Print Store Flyers** to print each flyer cleanly on its own page!
-
-<FollowUp>
-Would you like me to add a direct link button to this printable flyers page on your Admin Dashboard (`admin.html`)?
-</FollowUp>
-
-<ElicitationsGroup>
-</ElicitationsGroup>
