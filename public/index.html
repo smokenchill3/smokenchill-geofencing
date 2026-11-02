@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smoke N Chill — Deals & Wallet Passes</title>
+  <title>Smoke N Chill (GeoPass) — Deals & Wallet Passes</title>
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
   <!-- Firebase App & Auth SDKs (Compat version) -->
@@ -145,7 +145,14 @@
       font-size: 1.5rem;
       font-weight: 800;
       color: var(--accent);
+      margin-bottom: 5px;
+    }
+
+    .promo-expiry {
+      font-size: 0.82rem;
+      color: var(--warning);
       margin-bottom: 15px;
+      font-weight: 600;
     }
 
     .qr-container {
@@ -434,7 +441,8 @@
       async function loadPromotions() {
         const container = document.getElementById('promotions-list');
         try {
-          const res = await fetch('/api/promotions/all');
+          // Fetch only active, non-expired promotions
+          const res = await fetch('/api/promotions/active');
           const data = await res.json();
 
           if (!data.success || !data.promotions || data.promotions.length === 0) {
@@ -443,7 +451,6 @@
           }
 
           const locationPromos = data.promotions.filter(p => {
-            if (!p.is_active) return false;
             if (!p.location) return true;
             const loc = p.location.toLowerCase();
             return loc === activeStoreKey || loc === 'all';
@@ -467,6 +474,16 @@
             const qrCanvasId = `qr-${promo.code}`;
             const walletUrl = `/api/wallet/google/${encodeURIComponent(promo.code)}?customerId=${encodeURIComponent(customerId)}`;
 
+            let expiryFormatted = 'N/A';
+            if (promo.expires_at) {
+              expiryFormatted = new Date(promo.expires_at).toLocaleDateString('en-US', {
+                timeZone: 'America/Chicago',
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric'
+              });
+            }
+
             let cooldownText = '🔒 Redeemed today. Unlocks in 24 hours.';
             if (statusData.unlocks_at) {
               const unlockTime = new Date(statusData.unlocks_at).toLocaleTimeString('en-US', {
@@ -481,6 +498,7 @@
             card.innerHTML = `
               <div class="promo-title">${escapeHtml(promo.title)}</div>
               <div class="promo-discount">${escapeHtml(promo.discount_text)}</div>
+              <div class="promo-expiry">⏳ Expires: ${expiryFormatted}</div>
               
               <div class="qr-container">
                 <canvas id="${qrCanvasId}"></canvas>
