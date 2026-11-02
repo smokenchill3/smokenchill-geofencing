@@ -207,10 +207,10 @@
 </div>
 
   <div class="grid">
-    <!-- Admin Login -->
+    <!-- Staff / Admin Login -->
     <div class="card">
-      <div class="card-title">🔑 Admin / Manager Login</div>
-      <div class="card-subtitle">Log in to manage promotions, announcements, and users.</div>
+      <div class="card-title">🔑 Staff / Admin Login</div>
+      <div class="card-subtitle">Log in with your assigned staff or manager credentials.</div>
       
       <form id="loginForm" onsubmit="handleLogin(event)">
         <div class="form-group">
@@ -226,27 +226,34 @@
       <div id="loginStatus" class="alert-status"></div>
     </div>
 
-    <!-- Create Admin User -->
-    <div class="card">
-      <div class="card-title">👤 Create New Admin User</div>
-      <div class="card-subtitle">Create logins for shift managers.</div>
+    <!-- Create Staff User -->
+    <div class="card" id="createUserCard">
+      <div class="card-title">👤 Create Staff Account</div>
+      <div class="card-subtitle">Create logins for shift managers or cashiers.</div>
       
       <form id="createUserForm" onsubmit="handleCreateUser(event)">
         <div class="form-group">
-          <label for="newUsername">New Username</label>
-          <input type="text" id="newUsername" placeholder="manager1" required>
+          <label for="newUsername">Username</label>
+          <input type="text" id="newUsername" placeholder="cashier_john" required>
         </div>
         <div class="form-group">
-          <label for="newPassword">New Password</label>
+          <label for="newPassword">Password</label>
           <input type="password" id="newPassword" placeholder="••••••••" required>
         </div>
-        <button type="submit" class="btn">Create New User</button>
+        <div class="form-group">
+          <label for="newUserRole">Account Role</label>
+          <select id="newUserRole">
+            <option value="shift_manager">Shift Manager (Promos & Inventory)</option>
+            <option value="cashier">Cashier (Redeem & Inventory Controls Only)</option>
+          </select>
+        </div>
+        <button type="submit" class="btn">Create User Account</button>
       </form>
       <div id="createUserStatus" class="alert-status"></div>
 
       <!-- Shift Managers List (Visible to Admin Only) -->
       <div id="adminManagerListSection" style="display: none; margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 16px;">
-        <h4 style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">Active Shift Managers (<span id="managerCount">0</span>)</h4>
+        <h4 style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">Active Staff Accounts (<span id="managerCount">0</span>)</h4>
         <div id="shiftManagerList" class="item-list"></div>
       </div>
     </div>
@@ -275,7 +282,7 @@
     </div>
 
     <!-- Create New Promotion -->
-    <div class="card">
+    <div class="card" id="createPromoCard">
       <div class="card-title">➕ Create New Promotion</div>
       <div class="card-subtitle">Add a new deal that automatically syncs with PostgreSQL.</div>
       
@@ -302,7 +309,7 @@
     </div>
 
     <!-- Store Announcements & Emergency Notices -->
-    <div class="card">
+    <div class="card" id="announcementCard">
       <div class="card-title">📢 Post Store Announcement / Closure Notice</div>
       <div class="card-subtitle">Broadcast emergency notices or upcoming offer newsletters.</div>
       
@@ -379,22 +386,40 @@
       const statusEl = document.getElementById('sessionStatus');
       const logoutBtn = document.getElementById('logoutBtn');
       const managerSection = document.getElementById('adminManagerListSection');
+      
+      const createUserCard = document.getElementById('createUserCard');
+      const createPromoCard = document.getElementById('createPromoCard');
+      const announcementCard = document.getElementById('announcementCard');
 
       if (token) {
         const payload = parseJwt(token);
         const username = payload && payload.username ? payload.username : 'Admin';
-        const role = payload && payload.role ? payload.role.replace('_', ' ').toUpperCase() : 'ADMIN';
+        const role = payload && payload.role ? payload.role.toLowerCase() : 'admin';
+        const roleDisplay = role.replace('_', ' ').toUpperCase();
 
-        statusEl.textContent = `Status: Logged in as ${username} (${role})`;
+        statusEl.textContent = `Status: Logged in as ${username} (${roleDisplay})`;
         statusEl.style.color = 'var(--accent-green)';
         if (logoutBtn) logoutBtn.style.display = 'inline-block';
         if (managerSection) managerSection.style.display = 'block';
-        loadShiftManagers();
+
+        if (role === 'cashier') {
+          if (createUserCard) createUserCard.style.display = 'none';
+          if (createPromoCard) createPromoCard.style.display = 'none';
+          if (announcementCard) announcementCard.style.display = 'none';
+        } else {
+          if (createUserCard) createUserCard.style.display = 'block';
+          if (createPromoCard) createPromoCard.style.display = 'block';
+          if (announcementCard) announcementCard.style.display = 'block';
+          loadShiftManagers();
+        }
       } else {
         statusEl.textContent = 'Status: Guest Mode (Authentication Required)';
         statusEl.style.color = 'var(--text-muted)';
         if (logoutBtn) logoutBtn.style.display = 'none';
         if (managerSection) managerSection.style.display = 'none';
+        if (createUserCard) createUserCard.style.display = 'block';
+        if (createPromoCard) createUserCard.style.display = 'block';
+        if (announcementCard) announcementCard.style.display = 'block';
       }
     }
 
@@ -443,6 +468,7 @@
 
       const newUsername = document.getElementById('newUsername').value.trim();
       const newPassword = document.getElementById('newPassword').value.trim();
+      const role = document.getElementById('newUserRole').value;
 
       try {
         const res = await fetch('/api/admin/add-user', {
@@ -451,7 +477,7 @@
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ newUsername, newPassword })
+          body: JSON.stringify({ newUsername, newPassword, role })
         });
         const data = await res.json();
 
@@ -478,7 +504,7 @@
         const data = await res.json();
 
         if (!data.success || !data.users) {
-          container.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted);">No managers found.</p>';
+          container.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted);">No staff found.</p>';
           countEl.textContent = '0';
           return;
         }
@@ -487,7 +513,7 @@
         countEl.textContent = data.users.length;
 
         if (data.users.length === 0) {
-          container.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted);">No shift manager accounts created yet.</p>';
+          container.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted);">No staff accounts created yet.</p>';
           return;
         }
 
@@ -497,21 +523,21 @@
           div.innerHTML = `
             <div>
               <strong style="font-size:0.85rem; color:#fff;">${user.username}</strong>
-              <span class="badge badge-active">${user.role ? user.role.toUpperCase() : 'MANAGER'}</span>
+              <span class="badge badge-active">${user.role ? user.role.toUpperCase() : 'STAFF'}</span>
             </div>
             <button class="btn-danger" onclick="deleteShiftManager('${user.username}')">Delete</button>
           `;
           container.appendChild(div);
         });
       } catch (err) {
-        console.error('Failed loading shift managers:', err);
+        console.error('Failed loading staff users:', err);
       }
     }
 
     async function deleteShiftManager(username) {
       const token = getAuthToken();
       if (!token) return alert('Admin authentication required.');
-      if (!confirm(`Are you sure you want to delete manager account "${username}"?`)) return;
+      if (!confirm(`Are you sure you want to delete account "${username}"?`)) return;
 
       try {
         const res = await fetch('/api/admin/delete-user', {
@@ -528,12 +554,13 @@
           loadShiftManagers();
         }
       } catch (err) {
-        alert('Failed to delete manager account.');
+        alert('Failed to delete staff account.');
       }
     }
 
     async function handleRedeem(e) {
       e.preventDefault();
+      const token = getAuthToken();
       const input = document.getElementById('couponCode');
       const rawValue = input.value.trim();
 
@@ -542,7 +569,10 @@
       try {
         const res = await fetch('/api/redeem', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
           body: JSON.stringify({ couponCode: rawValue })
         });
         const data = await res.json();
@@ -567,11 +597,15 @@
 
     async function handleUndoScan() {
       if (!lastScannedData) return;
+      const token = getAuthToken();
 
       try {
         const res = await fetch('/api/cashier/reset-cooldown', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
           body: JSON.stringify(lastScannedData)
         });
         const data = await res.json();
@@ -587,7 +621,7 @@
     async function handleCreatePromo(e) {
       e.preventDefault();
       const token = getAuthToken();
-      if (!token) return showStatus('createPromoStatus', 'Admin login required.', false);
+      if (!token) return showStatus('createPromoStatus', 'Manager/Admin login required.', false);
 
       const code = document.getElementById('promoCodeInput').value;
       const title = document.getElementById('promoTitleInput').value;
@@ -737,12 +771,22 @@
     }
 
     async function togglePromo(code, currentState) {
+      const token = getAuthToken();
+      if (!token) return alert('Staff login required.');
+
       try {
-        await fetch('/api/promotions/toggle', {
+        const res = await fetch('/api/promotions/toggle', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
           body: JSON.stringify({ code, is_active: !currentState })
         });
+        const data = await res.json();
+        if (!data.success) {
+          alert(data.message || 'Failed to toggle promotion.');
+        }
         loadPromotions();
       } catch (err) {
         alert('Failed to toggle promotion.');
@@ -750,12 +794,17 @@
     }
 
     async function deletePromo(code) {
+      const token = getAuthToken();
+      if (!token) return alert('Staff login required.');
       if (!confirm(`Are you sure you want to delete promotion "${code}"?`)) return;
 
       try {
         const res = await fetch('/api/promotions/delete', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
           body: JSON.stringify({ code })
         });
 

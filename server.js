@@ -69,7 +69,6 @@ async function initDb() {
       );
     `);
 
-    // Ensure location column exists if table was already created previously
     await pool.query(`ALTER TABLE promotions ADD COLUMN IF NOT EXISTS location VARCHAR(50) DEFAULT 'all';`);
 
     const userCheck = await pool.query('SELECT * FROM users WHERE username = $1', ['admin']);
@@ -99,6 +98,35 @@ function verifyAdminToken(req, res, next) {
   });
 }
 
+// Middleware to verify logged-in staff or admin for POS operations (Cashiers, Shift Managers, Admins)
+function verifyStaffToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) return res.status(401).json({ success: false, message: 'Access denied. Staff login required.' });
+
+  const token = authHeader.split(' ')[1];
+  jwt.verify(token, JWT_SECRET, (err, decoded) => {
+    if (err) return res.status(403).json({ success: false, message: 'Invalid or expired session.' });
+    req.user = decoded;
+    next();
+  });
+}
+
+// Middleware to restrict promotion creation to Shift Managers and Admins only
+function verifyManagerToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) return res.status(401).json({ success: false, message: 'Access denied. Token missing.' });
+
+  const token = authHeader.split(' ')[1];
+  jwt.verify(token, JWT_SECRET, (err, decoded) => {
+    if (err) return res.status(403).json({ success: false, message: 'Invalid or expired token.' });
+    if (decoded.role !== 'admin' && decoded.role !== 'shift_manager') {
+      return res.status(403).json({ success: false, message: 'Permission denied. Shift Manager or Admin required to create promotions.' });
+    }
+    req.user = decoded;
+    next();
+  });
+}
+
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
   try {
@@ -123,8 +151,6 @@ app.post('/api/auth/login', async (req, res) => {
 // ==============================================
 // User Management Endpoints
 // ==============================================
-
-// List all registered accounts (Admin Only - excludes primary admin)
 app.get('/api/admin/users', verifyAdminToken, async (req, res) => {
   try {
     const result = await pool.query("SELECT id, username, role, created_at FROM users WHERE LOWER(username) != 'admin' ORDER BY id DESC");
@@ -134,7 +160,6 @@ app.get('/api/admin/users', verifyAdminToken, async (req, res) => {
   }
 });
 
-// Delete a staff/manager account by username (Admin Only)
 app.post('/api/admin/delete-user', verifyAdminToken, async (req, res) => {
   const { username } = req.body;
   if (!username) {
@@ -147,7 +172,6 @@ app.post('/api/admin/delete-user', verifyAdminToken, async (req, res) => {
     }
 
     const result = await pool.query('DELETE FROM users WHERE LOWER(username) = LOWER($1)', [username.trim()]);
-    
     if (result.rowCount === 0) {
       return res.status(404).json({ success: false, message: 'Manager account not found.' });
     }
@@ -158,7 +182,6 @@ app.post('/api/admin/delete-user', verifyAdminToken, async (req, res) => {
   }
 });
 
-// Admin User Creation (Supports optional role parameter)
 app.post('/api/admin/add-user', verifyAdminToken, async (req, res) => {
   const { newUsername, newPassword, role } = req.body;
   if (!newUsername || !newPassword) {
@@ -173,7 +196,7 @@ app.post('/api/admin/add-user', verifyAdminToken, async (req, res) => {
       'INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)',
       [newUsername.trim().toLowerCase(), hashed, userRole]
     );
-    res.json({ success: true, message: `Manager account "${newUsername}" created successfully!` });
+    res.json({ success: true, message: `Staff account "${newUsername}" created successfully!` });
   } catch (err) {
     res.status(500).json({ success: false, message: 'User already exists or server error.' });
   }
@@ -188,7 +211,6 @@ app.get('/api/promotions/all', async (req, res) => {
   }
 });
 
-// Active-Only Endpoint for Customer Promos
 app.get('/api/promotions/active', async (req, res) => {
   try {
     const result = await pool.query(
@@ -200,7 +222,8 @@ app.get('/api/promotions/active', async (req, res) => {
   }
 });
 
-app.post('/api/admin/promotions/create', verifyAdminToken, async (req, res) => {
+// Promotion creation restricted to Shift Managers and Admins
+app.post('/api/admin/promotions/create', verifyManagerToken, async (req, res) => {
   const { code, title, discountText, expiresAt, location } = req.body;
   if (!code || !title || !discountText) {
     return res.status(400).json({ success: false, message: 'Code, title, and discount text required.' });
@@ -227,7 +250,8 @@ app.post('/api/admin/promotions/create', verifyAdminToken, async (req, res) => {
   }
 });
 
-app.post('/api/promotions/toggle', async (req, res) => {
+// Cashiers, Shift Managers, and Admins can toggle promo status (disable/enable)
+app.post('/api/promotions/toggle', verifyStaffToken, async (req, res) => {
   const { code, is_active } = req.body;
   try {
     await pool.query('UPDATE promotions SET is_active = $1 WHERE code = $2', [is_active, code]);
@@ -238,8 +262,8 @@ app.post('/api/promotions/toggle', async (req, res) => {
   }
 });
 
-// Open to Cashiers: Delete Promotion without Admin Token
-app.post('/api/promotions/delete', async (req, res) => {
+// Cashiers, Shift Managers, and Admins can delete promos
+app.post('/api/promotions/delete', verifyStaffToken, async (req, res) => {
   const { code } = req.body;
   try {
     await pool.query('DELETE FROM promotions WHERE code = $1', [code]);
@@ -410,8 +434,8 @@ app.get('/api/wallet/google/:code', async (req, res) => {
   }
 });
 
-// Redeem Coupon with Austin Time Zone 24hr Cooldown
-app.post('/api/redeem', async (req, res) => {
+// Redeem Coupon — Protected with verifyStaffToken
+app.post('/api/redeem', verifyStaffToken, async (req, res) => {
   const { couponCode, customerId } = req.body;
   if (!couponCode) return res.status(400).json({ success: false, message: '❌ Coupon code required.' });
 
@@ -469,8 +493,8 @@ app.post('/api/redeem', async (req, res) => {
   }
 });
 
-// Open to Cashiers: Undo Redemptions Instantly (No Admin Token Required)
-app.post('/api/cashier/reset-cooldown', async (req, res) => {
+// Reset Cooldown — Protected with verifyStaffToken
+app.post('/api/cashier/reset-cooldown', verifyStaffToken, async (req, res) => {
   const { couponCode, customerId } = req.body;
   if (!couponCode) return res.status(400).json({ success: false, message: 'Coupon code required.' });
 
