@@ -188,6 +188,18 @@ app.get('/api/promotions/all', async (req, res) => {
   }
 });
 
+// Active-Only Endpoint for Customer Promos
+app.get('/api/promotions/active', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM promotions WHERE is_active = true AND expires_at > NOW() ORDER BY id DESC'
+    );
+    res.json({ success: true, promotions: result.rows });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 app.post('/api/admin/promotions/create', verifyAdminToken, async (req, res) => {
   const { code, title, discountText, expiresAt, location } = req.body;
   if (!code || !title || !discountText) {
@@ -313,11 +325,13 @@ app.get('/api/wallet/google/:code', async (req, res) => {
   const customerId = req.query.customerId || 'cust_' + Math.random().toString(36).substring(2, 10);
 
   try {
-    const promo = await pool.query('SELECT * FROM promotions WHERE UPPER(TRIM(code)) = $1 AND is_active = true', [promoCode]);
+    const promo = await pool.query(
+      'SELECT * FROM promotions WHERE UPPER(TRIM(code)) = $1 AND is_active = true AND expires_at > NOW()',
+      [promoCode]
+    );
     if (promo.rows.length === 0) {
-      return res.status(404).send('Promotion not found or inactive.');
+      return res.status(404).send('Promotion not found, inactive, or expired.');
     }
-
     const offer = promo.rows[0];
 
     if (!process.env.SERVICE_ACCOUNT_JSON) {
@@ -370,15 +384,19 @@ app.get('/api/wallet/google/:code', async (req, res) => {
             title: offer.title,
             header: offer.discount_text,
             textModulesData: [
-              {
-                header: 'Store Location',
-                body: 'Smoke N Chill — Austin, TX'
-              },
-              {
-                header: 'Terms',
-                body: '1 redemption per customer every 24 hours.'
-              }
-            ]
+            {
+              header: 'Store Location',
+              body: 'Smoke N Chill — Austin, TX'
+            },
+            {
+              header: 'Expires',
+              body: new Date(offer.expires_at).toLocaleDateString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric', year: 'numeric' })
+            },
+            {
+              header: 'Terms',
+              body: '1 redemption per customer every 24 hours. No Double Discount.'
+            }
+          ]
           }
         ]
       }
