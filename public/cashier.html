@@ -271,14 +271,29 @@
         <button type="submit" class="btn">Redeem Coupon</button>
       </form>
 
-      <!-- Temporary Undo Last Scan Button (60s Window) -->
-      <div id="undoContainer" style="display: none; margin-top: 10px;">
-        <button type="button" class="btn-danger" style="width: 100%; padding: 12px; font-size: 0.9rem;" onclick="handleUndoScan()">
+      <!-- Temporary Undo Last Scan Button (60s Window with Live Timer) -->
+      <div id="undoContainer" style="display: none; margin-top: 10px; text-align: center;">
+        <button type="button" class="btn-danger" style="width: 100%; padding: 12px; font-size: 0.9rem; margin-bottom: 6px;" onclick="handleUndoScan()">
           ↩️ Undo Last Scan (Accidental Scan)
         </button>
+        <span id="undoTimerDisplay" style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;"></span>
       </div>
 
       <div id="redeemStatus" class="alert-status"></div>
+    </div>
+
+    <!-- Admin View: Employee Redemption Activity -->
+    <div class="card" id="staffAuditCard" style="display: none;">
+      <div class="card-title">📊 Employee Redemption Activity</div>
+      <div class="card-subtitle">Track all coupon redemptions processed by cashier staff.</div>
+      <div id="staffAuditList" class="item-list"></div>
+    </div>
+
+    <!-- Admin View: Undo Transaction Audit Log -->
+    <div class="card" id="undoAuditCard" style="display: none;">
+      <div class="card-title">🔍 Staff Undo Audit Log</div>
+      <div class="card-subtitle">Track all transaction cancellations and resets performed by staff.</div>
+      <div id="undoAuditList" class="item-list"></div>
     </div>
 
     <!-- Create New Promotion -->
@@ -353,16 +368,26 @@
     const socket = io();
     let lastScannedData = null;
     let undoTimeout = null;
+    let countdownInterval = null;
 
     document.addEventListener('DOMContentLoaded', () => {
       updateSessionUI();
       loadPromotions();
       loadAdminAnnouncements();
       loadShiftManagers();
+      loadRedemptionAudit();
+      loadUndoHistory();
     });
 
-    socket.on('promoStateUpdated', loadPromotions);
+    socket.on('promoStateUpdated', () => {
+      loadPromotions();
+      loadRedemptionAudit();
+      loadUndoHistory();
+    });
     socket.on('announcementsUpdated', loadAdminAnnouncements);
+    socket.on('couponRedeemed', () => {
+      loadRedemptionAudit();
+    });
 
     function getAuthToken() {
       return localStorage.getItem('adminToken') || '';
@@ -392,6 +417,8 @@
       const announcementCard = document.getElementById('announcementCard');
       const redeemCard = document.getElementById('redeemCard');
       const inventoryCard = document.getElementById('inventoryCard');
+      const staffAuditCard = document.getElementById('staffAuditCard');
+      const undoAuditCard = document.getElementById('undoAuditCard');
 
       if (token) {
         const payload = parseJwt(token);
@@ -412,11 +439,17 @@
           if (createUserCard) createUserCard.style.display = 'none';
           if (createPromoCard) createUserCard.style.display = 'none';
           if (announcementCard) announcementCard.style.display = 'none';
+          if (staffAuditCard) staffAuditCard.style.display = 'none';
+          if (undoAuditCard) undoAuditCard.style.display = 'none';
         } else {
           if (createUserCard) createUserCard.style.display = 'block';
           if (createPromoCard) createUserCard.style.display = 'block';
           if (announcementCard) announcementCard.style.display = 'block';
+          if (staffAuditCard) staffAuditCard.style.display = 'block';
+          if (undoAuditCard) undoAuditCard.style.display = 'block';
           loadShiftManagers();
+          loadRedemptionAudit();
+          loadUndoHistory();
         }
       } else {
         statusEl.textContent = 'Status: Guest Mode (Authentication Required)';
@@ -430,6 +463,8 @@
         if (announcementCard) announcementCard.style.display = 'none';
         if (redeemCard) redeemCard.style.display = 'none';
         if (inventoryCard) inventoryCard.style.display = 'none';
+        if (staffAuditCard) staffAuditCard.style.display = 'none';
+        if (undoAuditCard) undoAuditCard.style.display = 'none';
       }
     }
 
@@ -463,6 +498,8 @@
           localStorage.setItem('adminToken', data.token);
           showStatus('loginStatus', 'Login successful!', true);
           updateSessionUI();
+          loadRedemptionAudit();
+          loadUndoHistory();
         } else {
           showStatus('loginStatus', data.message || 'Login failed', false);
         }
@@ -568,6 +605,86 @@
       }
     }
 
+    async function loadRedemptionAudit() {
+      const token = getAuthToken();
+      const container = document.getElementById('staffAuditList');
+      const auditCard = document.getElementById('staffAuditCard');
+      if (!container || !token) return;
+
+      const payload = parseJwt(token);
+      if (!payload || payload.role === 'cashier') {
+        if (auditCard) auditCard.style.display = 'none';
+        return;
+      }
+      if (auditCard) auditCard.style.display = 'block';
+
+      try {
+        const res = await fetch('/api/admin/redemption-history', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+
+        if (!data.success || !data.redemptions || data.redemptions.length === 0) {
+          container.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted);">No redemptions recorded.</p>';
+          return;
+        }
+
+        container.innerHTML = data.redemptions.map(r => `
+          <div class="list-item">
+            <div>
+              <strong style="font-size:0.85rem; color:#fff;">${r.coupon_code}</strong> 
+              <span style="font-size:0.75rem; color:var(--text-muted);">(Customer: ${r.customer_id})</span>
+              <p style="font-size:0.75rem; color:var(--accent-green); margin-top:4px;">
+                Processed by: <strong>${r.redeemed_by}</strong> at ${new Date(r.redeemed_at).toLocaleString()}
+              </p>
+            </div>
+          </div>
+        `).join('');
+      } catch (err) {
+        console.error('Failed to load redemption history:', err);
+      }
+    }
+
+    async function loadUndoHistory() {
+      const token = getAuthToken();
+      const container = document.getElementById('undoAuditList');
+      const auditCard = document.getElementById('undoAuditCard');
+      if (!container || !token) return;
+
+      const payload = parseJwt(token);
+      if (!payload || payload.role === 'cashier') {
+        if (auditCard) auditCard.style.display = 'none';
+        return;
+      }
+      if (auditCard) auditCard.style.display = 'block';
+
+      try {
+        const res = await fetch('/api/admin/undo-history', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+
+        if (!data.success || !data.undos || data.undos.length === 0) {
+          container.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted);">No undo transactions recorded.</p>';
+          return;
+        }
+
+        container.innerHTML = data.undos.map(u => `
+          <div class="list-item">
+            <div>
+              <strong style="font-size:0.85rem; color:#fff;">${u.coupon_code}</strong> 
+              <span style="font-size:0.75rem; color:var(--text-muted);">(Customer: ${u.customer_id})</span>
+              <p style="font-size:0.75rem; color:var(--danger-red); margin-top:4px;">
+                Undone by: <strong>${u.undone_by}</strong> at ${new Date(u.undone_at).toLocaleString()}
+              </p>
+            </div>
+          </div>
+        `).join('');
+      } catch (err) {
+        console.error('Failed to load undo history:', err);
+      }
+    }
+
     async function handleRedeem(e) {
       e.preventDefault();
       const token = getAuthToken();
@@ -595,10 +712,27 @@
           document.getElementById('undoContainer').style.display = 'block';
 
           if (undoTimeout) clearTimeout(undoTimeout);
+          if (countdownInterval) clearInterval(countdownInterval);
+
+          let timeLeft = 60;
+          const timerDisplay = document.getElementById('undoTimerDisplay');
+          timerDisplay.textContent = `Time remaining to undo: ${timeLeft}s`;
+
+          countdownInterval = setInterval(() => {
+            timeLeft--;
+            timerDisplay.textContent = `Time remaining to undo: ${timeLeft}s`;
+            if (timeLeft <= 0) {
+              clearInterval(countdownInterval);
+            }
+          }, 1000);
+
           undoTimeout = setTimeout(() => {
             document.getElementById('undoContainer').style.display = 'none';
             lastScannedData = null;
+            if (countdownInterval) clearInterval(countdownInterval);
           }, 60000);
+
+          loadRedemptionAudit();
         }
       } catch (err) {
         showStatus('redeemStatus', 'Redemption failed.', false);
@@ -623,6 +757,11 @@
         showStatus('redeemStatus', data.message, data.success);
         document.getElementById('undoContainer').style.display = 'none';
         lastScannedData = null;
+        if (undoTimeout) clearTimeout(undoTimeout);
+        if (countdownInterval) clearInterval(countdownInterval);
+
+        loadRedemptionAudit();
+        loadUndoHistory();
       } catch (err) {
         showStatus('redeemStatus', 'Failed to undo scan.', false);
       }

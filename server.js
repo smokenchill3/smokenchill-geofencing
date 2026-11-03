@@ -56,7 +56,16 @@ async function initDb() {
           id SERIAL PRIMARY KEY,
           coupon_code VARCHAR(50) NOT NULL,
           customer_id VARCHAR(100) DEFAULT 'general_customer',
+          redeemed_by VARCHAR(50) DEFAULT 'system',
           redeemed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS undo_transactions (
+          id SERIAL PRIMARY KEY,
+          coupon_code VARCHAR(50) NOT NULL,
+          customer_id VARCHAR(100) NOT NULL,
+          undone_by VARCHAR(50) NOT NULL,
+          undone_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
       CREATE TABLE IF NOT EXISTS announcements (
@@ -70,6 +79,7 @@ async function initDb() {
     `);
 
     await pool.query(`ALTER TABLE promotions ADD COLUMN IF NOT EXISTS location VARCHAR(50) DEFAULT 'all';`);
+    await pool.query(`ALTER TABLE redemptions ADD COLUMN IF NOT EXISTS redeemed_by VARCHAR(50) DEFAULT 'system';`);
 
     const userCheck = await pool.query('SELECT * FROM users WHERE username = $1', ['admin']);
     if (userCheck.rows.length === 0) {
@@ -149,7 +159,7 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // ==============================================
-// User Management Endpoints
+// User Management & Audit Endpoints
 // ==============================================
 app.get('/api/admin/users', verifyAdminToken, async (req, res) => {
   try {
@@ -199,6 +209,36 @@ app.post('/api/admin/add-user', verifyAdminToken, async (req, res) => {
     res.json({ success: true, message: `Staff account "${newUsername}" created successfully!` });
   } catch (err) {
     res.status(500).json({ success: false, message: 'User already exists or server error.' });
+  }
+});
+
+// Admin Redemption Audit Endpoint
+app.get('/api/admin/redemption-history', verifyAdminToken, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT id, coupon_code, customer_id, redeemed_by, redeemed_at
+      FROM redemptions
+      ORDER BY redeemed_at DESC
+      LIMIT 100
+    `);
+    res.json({ success: true, redemptions: result.rows });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Admin Undo History Audit Endpoint
+app.get('/api/admin/undo-history', verifyAdminToken, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT id, coupon_code, customer_id, undone_by, undone_at
+      FROM undo_transactions
+      ORDER BY undone_at DESC
+      LIMIT 100
+    `);
+    res.json({ success: true, undos: result.rows });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 
@@ -434,9 +474,11 @@ app.get('/api/wallet/google/:code', async (req, res) => {
   }
 });
 
-// Redeem Coupon — Protected with verifyStaffToken
+// Redeem Coupon — Protected with verifyStaffToken & records staff username
 app.post('/api/redeem', verifyStaffToken, async (req, res) => {
   const { couponCode, customerId } = req.body;
+  const staffUser = req.user ? req.user.username : 'unknown_staff';
+
   if (!couponCode) return res.status(400).json({ success: false, message: '❌ Coupon code required.' });
 
   let code = couponCode.trim().toUpperCase();
@@ -482,20 +524,23 @@ app.post('/api/redeem', verifyStaffToken, async (req, res) => {
       });
     }
 
-    await pool.query('INSERT INTO redemptions (coupon_code, customer_id) VALUES ($1, $2)', [code, customer]);
+    // Insert redemption record with staff username attribution
+    await pool.query('INSERT INTO redemptions (coupon_code, customer_id, redeemed_by) VALUES ($1, $2, $3)', [code, customer, staffUser]);
     const unlocksAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     io.emit('couponRedeemed', { couponCode: code, customerId: customer, unlocksAt });
 
-    res.json({ success: true, message: `✅ Coupon "${code}" successfully redeemed for customer (${customer})!` });
+    res.json({ success: true, message: `✅ Coupon "${code}" successfully redeemed for customer (${customer}) by ${staffUser}!` });
   } catch (err) {
     res.status(500).json({ success: false, message: `Server error: ${err.message}` });
   }
 });
 
-// Reset Cooldown — Protected with verifyStaffToken
+// Reset Cooldown (Undo Scan) — Protected with verifyStaffToken & logs to undo_transactions
 app.post('/api/cashier/reset-cooldown', verifyStaffToken, async (req, res) => {
   const { couponCode, customerId } = req.body;
+  const staffUser = req.user ? req.user.username : 'unknown_staff';
+
   if (!couponCode) return res.status(400).json({ success: false, message: 'Coupon code required.' });
 
   let code = couponCode.trim().toUpperCase();
@@ -513,8 +558,14 @@ app.post('/api/cashier/reset-cooldown', verifyStaffToken, async (req, res) => {
       [code, customer]
     );
 
+    // Record undo transaction in backend audit table
+    await pool.query(
+      'INSERT INTO undo_transactions (coupon_code, customer_id, undone_by) VALUES ($1, $2, $3)',
+      [code, customer, staffUser]
+    );
+
     io.emit('promoStateUpdated');
-    res.json({ success: true, message: `✅ Accidentally redeemed lock cleared for customer (${customer}) on "${code}". Coupon reopened!` });
+    res.json({ success: true, message: `✅ Accidentally redeemed lock cleared for customer (${customer}) on "${code}" by ${staffUser}. Coupon reopened!` });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
