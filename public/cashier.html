@@ -196,19 +196,19 @@
 </head>
 <body>
   
-   <div class="header">
-   <h1>Smoke N Chill — Cashier & Admin Portal</h1>
-   <div style="display: flex; align-items: center; gap: 12px;">
-   <div id="sessionStatus" style="font-size: 0.85rem; color: var(--text-muted);">Status: Guest Mode</div>
-   <button id="logoutBtn" class="btn-danger" style="display: none; padding: 6px 12px; font-size: 0.8rem;" onclick="handleLogout()">
-   🚪 Log Out
-   </button>
- </div>
-</div>
+  <div class="header">
+    <h1>Smoke N Chill — Cashier & Admin Portal</h1>
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <div id="sessionStatus" style="font-size: 0.85rem; color: var(--text-muted);">Status: Guest Mode</div>
+      <button id="logoutBtn" class="btn-danger" style="display: none; padding: 6px 12px; font-size: 0.8rem;" onclick="handleLogout()">
+        🚪 Log Out
+      </button>
+    </div>
+  </div>
 
   <div class="grid">
-    <!-- Staff / Admin Login -->
-    <div class="card">
+    <!-- Staff / Admin Login Card (Hidden when logged in) -->
+    <div class="card" id="loginCard">
       <div class="card-title">🔑 Staff / Admin Login</div>
       <div class="card-subtitle">Log in with your assigned staff or manager credentials.</div>
       
@@ -276,7 +276,7 @@
         <button type="button" class="btn-danger" style="width: 100%; padding: 12px; font-size: 0.9rem; margin-bottom: 6px;" onclick="handleUndoScan()">
           ↩️ Undo Last Scan (Accidental Scan)
         </button>
-        <span id="undoTimerDisplay" style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;"></span>
+        <span id="undoTimerDisplay" style="font-size: 0.85rem; color: #ff5252; font-weight: 700; display: block; margin-top: 4px;"></span>
       </div>
 
       <div id="redeemStatus" class="alert-status"></div>
@@ -410,6 +410,7 @@
       const token = getAuthToken();
       const statusEl = document.getElementById('sessionStatus');
       const logoutBtn = document.getElementById('logoutBtn');
+      const loginCard = document.getElementById('loginCard');
       const managerSection = document.getElementById('adminManagerListSection');
       
       const createUserCard = document.getElementById('createUserCard');
@@ -429,7 +430,7 @@
         statusEl.textContent = `Status: Logged in as ${username} (${roleDisplay})`;
         statusEl.style.color = 'var(--accent-green)';
         if (logoutBtn) logoutBtn.style.display = 'inline-block';
-        if (managerSection) managerSection.style.display = 'block';
+        if (loginCard) loginCard.style.display = 'none'; // Hide Login Box when authenticated
 
         // Show operational cards upon successful login
         if (redeemCard) redeemCard.style.display = 'block';
@@ -437,16 +438,17 @@
 
         if (role === 'cashier') {
           if (createUserCard) createUserCard.style.display = 'none';
-          if (createPromoCard) createUserCard.style.display = 'none';
+          if (createPromoCard) createPromoCard.style.display = 'none';
           if (announcementCard) announcementCard.style.display = 'none';
           if (staffAuditCard) staffAuditCard.style.display = 'none';
           if (undoAuditCard) undoAuditCard.style.display = 'none';
         } else {
           if (createUserCard) createUserCard.style.display = 'block';
-          if (createPromoCard) createUserCard.style.display = 'block';
+          if (createPromoCard) createPromoCard.style.display = 'block';
           if (announcementCard) announcementCard.style.display = 'block';
           if (staffAuditCard) staffAuditCard.style.display = 'block';
           if (undoAuditCard) undoAuditCard.style.display = 'block';
+          if (managerSection) managerSection.style.display = 'block';
           loadShiftManagers();
           loadRedemptionAudit();
           loadUndoHistory();
@@ -455,11 +457,12 @@
         statusEl.textContent = 'Status: Guest Mode (Authentication Required)';
         statusEl.style.color = 'var(--text-muted)';
         if (logoutBtn) logoutBtn.style.display = 'none';
+        if (loginCard) loginCard.style.display = 'block'; // Show Login Box in Guest Mode
         if (managerSection) managerSection.style.display = 'none';
 
-        // Hide all operational and management cards in Guest Mode
+        // Hide operational and management cards in Guest Mode
         if (createUserCard) createUserCard.style.display = 'none';
-        if (createPromoCard) createUserCard.style.display = 'none';
+        if (createPromoCard) createPromoCard.style.display = 'none';
         if (announcementCard) announcementCard.style.display = 'none';
         if (redeemCard) redeemCard.style.display = 'none';
         if (inventoryCard) inventoryCard.style.display = 'none';
@@ -716,12 +719,14 @@
 
           let timeLeft = 60;
           const timerDisplay = document.getElementById('undoTimerDisplay');
-          timerDisplay.textContent = `Time remaining to undo: ${timeLeft}s`;
+          timerDisplay.textContent = `⏳ Undo window closes in ${timeLeft}s`;
 
           countdownInterval = setInterval(() => {
             timeLeft--;
-            timerDisplay.textContent = `Time remaining to undo: ${timeLeft}s`;
-            if (timeLeft <= 0) {
+            if (timeLeft > 0) {
+              timerDisplay.textContent = `⏳ Undo window closes in ${timeLeft}s`;
+            } else {
+              timerDisplay.textContent = '';
               clearInterval(countdownInterval);
             }
           }, 1000);
