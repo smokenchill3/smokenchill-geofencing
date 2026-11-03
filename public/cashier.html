@@ -259,7 +259,7 @@
     </div>
 
     <!-- Scan / Redeem Coupon -->
-    <div class="card">
+    <div class="card" id="redeemCard">
       <div class="card-title">⚡ Scan / Redeem Coupon Code</div>
       <div class="card-subtitle">Scan QR code or type promo code to redeem.</div>
       
@@ -341,7 +341,7 @@
     </div>
 
     <!-- Store Inventory Controls -->
-    <div class="card">
+    <div class="card" id="inventoryCard">
       <div class="card-title">📦 Store Inventory Controls</div>
       <div class="card-subtitle">Toggle stock state or delete promotions from PostgreSQL.</div>
       
@@ -390,6 +390,8 @@
       const createUserCard = document.getElementById('createUserCard');
       const createPromoCard = document.getElementById('createPromoCard');
       const announcementCard = document.getElementById('announcementCard');
+      const redeemCard = document.getElementById('redeemCard');
+      const inventoryCard = document.getElementById('inventoryCard');
 
       if (token) {
         const payload = parseJwt(token);
@@ -402,13 +404,17 @@
         if (logoutBtn) logoutBtn.style.display = 'inline-block';
         if (managerSection) managerSection.style.display = 'block';
 
+        // Show operational cards upon successful login
+        if (redeemCard) redeemCard.style.display = 'block';
+        if (inventoryCard) inventoryCard.style.display = 'block';
+
         if (role === 'cashier') {
           if (createUserCard) createUserCard.style.display = 'none';
-          if (createPromoCard) createPromoCard.style.display = 'none';
+          if (createPromoCard) createUserCard.style.display = 'none';
           if (announcementCard) announcementCard.style.display = 'none';
         } else {
           if (createUserCard) createUserCard.style.display = 'block';
-          if (createPromoCard) createPromoCard.style.display = 'block';
+          if (createPromoCard) createUserCard.style.display = 'block';
           if (announcementCard) announcementCard.style.display = 'block';
           loadShiftManagers();
         }
@@ -417,9 +423,13 @@
         statusEl.style.color = 'var(--text-muted)';
         if (logoutBtn) logoutBtn.style.display = 'none';
         if (managerSection) managerSection.style.display = 'none';
-        if (createUserCard) createUserCard.style.display = 'block';
-        if (createPromoCard) createUserCard.style.display = 'block';
-        if (announcementCard) announcementCard.style.display = 'block';
+
+        // Hide all operational and management cards in Guest Mode
+        if (createUserCard) createUserCard.style.display = 'none';
+        if (createPromoCard) createUserCard.style.display = 'none';
+        if (announcementCard) announcementCard.style.display = 'none';
+        if (redeemCard) redeemCard.style.display = 'none';
+        if (inventoryCard) inventoryCard.style.display = 'none';
       }
     }
 
