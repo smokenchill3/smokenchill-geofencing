@@ -29,6 +29,9 @@ app.get('/cashier.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'cashier.html'));
 });
 
+// ==============================================
+// 1. Database Schema Initialization & Migration
+// ==============================================
 async function initDb() {
   try {
     await pool.query(`
@@ -49,6 +52,7 @@ async function initDb() {
           username VARCHAR(50) UNIQUE NOT NULL,
           password_hash VARCHAR(255) NOT NULL,
           role VARCHAR(20) DEFAULT 'admin',
+          location VARCHAR(50) DEFAULT 'Research',
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
@@ -57,6 +61,7 @@ async function initDb() {
           coupon_code VARCHAR(50) NOT NULL,
           customer_id VARCHAR(100) DEFAULT 'general_customer',
           redeemed_by VARCHAR(50) DEFAULT 'system',
+          location VARCHAR(50) DEFAULT 'Research',
           redeemed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
@@ -65,6 +70,7 @@ async function initDb() {
           coupon_code VARCHAR(50) NOT NULL,
           customer_id VARCHAR(100) NOT NULL,
           undone_by VARCHAR(50) NOT NULL,
+          location VARCHAR(50) DEFAULT 'Research',
           undone_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
@@ -78,15 +84,19 @@ async function initDb() {
       );
     `);
 
+    // Ensure columns exist on older databases
     await pool.query(`ALTER TABLE promotions ADD COLUMN IF NOT EXISTS location VARCHAR(50) DEFAULT 'all';`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS location VARCHAR(50) DEFAULT 'Research';`);
     await pool.query(`ALTER TABLE redemptions ADD COLUMN IF NOT EXISTS redeemed_by VARCHAR(50) DEFAULT 'system';`);
+    await pool.query(`ALTER TABLE redemptions ADD COLUMN IF NOT EXISTS location VARCHAR(50) DEFAULT 'Research';`);
+    await pool.query(`ALTER TABLE undo_transactions ADD COLUMN IF NOT EXISTS location VARCHAR(50) DEFAULT 'Research';`);
 
     const userCheck = await pool.query('SELECT * FROM users WHERE username = $1', ['admin']);
     if (userCheck.rows.length === 0) {
       const hashedPassword = await bcrypt.hash('smokenchill123', 10);
       await pool.query(
-        'INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)',
-        ['admin', hashedPassword, 'admin']
+        'INSERT INTO users (username, password_hash, role, location) VALUES ($1, $2, $3, $4)',
+        ['admin', hashedPassword, 'admin', 'Research']
       );
     }
   } catch (err) {
@@ -108,7 +118,6 @@ function verifyAdminToken(req, res, next) {
   });
 }
 
-// Middleware to verify logged-in staff or admin for POS operations (Cashiers, Shift Managers, Admins)
 function verifyStaffToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   if (!authHeader) return res.status(401).json({ success: false, message: 'Access denied. Staff login required.' });
@@ -121,7 +130,6 @@ function verifyStaffToken(req, res, next) {
   });
 }
 
-// Middleware to restrict promotion creation to Shift Managers and Admins only
 function verifyManagerToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   if (!authHeader) return res.status(401).json({ success: false, message: 'Access denied. Token missing.' });
@@ -130,13 +138,14 @@ function verifyManagerToken(req, res, next) {
   jwt.verify(token, JWT_SECRET, (err, decoded) => {
     if (err) return res.status(403).json({ success: false, message: 'Invalid or expired token.' });
     if (decoded.role !== 'admin' && decoded.role !== 'shift_manager') {
-      return res.status(403).json({ success: false, message: 'Permission denied. Shift Manager or Admin required to create promotions.' });
+      return res.status(403).json({ success: false, message: 'Permission denied. Shift Manager or Admin required.' });
     }
     req.user = decoded;
     next();
   });
 }
 
+// Login Endpoint — Embeds user location into JWT Token
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
   try {
@@ -151,7 +160,11 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid username or password.' });
     }
 
-    const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '12h' });
+    const token = jwt.sign(
+      { id: user.id, username: user.username, role: user.role, location: user.location || 'Research' }, 
+      JWT_SECRET, 
+      { expiresIn: '12h' }
+    );
     res.json({ success: true, message: 'Login successful!', token });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -159,11 +172,11 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // ==============================================
-// User Management & Audit Endpoints
+// 3. Admin Staff Creation with Location Assignment
 // ==============================================
 app.get('/api/admin/users', verifyAdminToken, async (req, res) => {
   try {
-    const result = await pool.query("SELECT id, username, role, created_at FROM users WHERE LOWER(username) != 'admin' ORDER BY id DESC");
+    const result = await pool.query("SELECT id, username, role, location, created_at FROM users WHERE LOWER(username) != 'admin' ORDER BY id DESC");
     res.json({ success: true, users: result.rows });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -193,30 +206,31 @@ app.post('/api/admin/delete-user', verifyAdminToken, async (req, res) => {
 });
 
 app.post('/api/admin/add-user', verifyAdminToken, async (req, res) => {
-  const { newUsername, newPassword, role } = req.body;
+  const { newUsername, newPassword, role, location } = req.body;
   if (!newUsername || !newPassword) {
     return res.status(400).json({ success: false, message: 'Username and password required.' });
   }
 
   const userRole = (role || 'shift_manager').trim().toLowerCase();
+  const userLocation = (location || 'Research').trim();
 
   try {
     const hashed = await bcrypt.hash(newPassword, 10);
     await pool.query(
-      'INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)',
-      [newUsername.trim().toLowerCase(), hashed, userRole]
+      'INSERT INTO users (username, password_hash, role, location) VALUES ($1, $2, $3, $4)',
+      [newUsername.trim().toLowerCase(), hashed, userRole, userLocation]
     );
-    res.json({ success: true, message: `Staff account "${newUsername}" created successfully!` });
+    res.json({ success: true, message: `Staff account "${newUsername}" created successfully for store "${userLocation}"!` });
   } catch (err) {
     res.status(500).json({ success: false, message: 'User already exists or server error.' });
   }
 });
 
-// Admin Redemption Audit Endpoint
+// Admin Redemption Audit Endpoint (Returns location for both Research & Parmer)
 app.get('/api/admin/redemption-history', verifyAdminToken, async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT id, coupon_code, customer_id, redeemed_by, redeemed_at
+      SELECT id, coupon_code, customer_id, redeemed_by, location, redeemed_at
       FROM redemptions
       ORDER BY redeemed_at DESC
       LIMIT 100
@@ -227,11 +241,11 @@ app.get('/api/admin/redemption-history', verifyAdminToken, async (req, res) => {
   }
 });
 
-// Admin Undo History Audit Endpoint
+// Admin Undo History Audit Endpoint (Returns location for both Research & Parmer)
 app.get('/api/admin/undo-history', verifyAdminToken, async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT id, coupon_code, customer_id, undone_by, undone_at
+      SELECT id, coupon_code, customer_id, undone_by, location, undone_at
       FROM undo_transactions
       ORDER BY undone_at DESC
       LIMIT 100
@@ -262,7 +276,6 @@ app.get('/api/promotions/active', async (req, res) => {
   }
 });
 
-// Promotion creation restricted to Shift Managers and Admins
 app.post('/api/admin/promotions/create', verifyManagerToken, async (req, res) => {
   const { code, title, discountText, expiresAt, location } = req.body;
   if (!code || !title || !discountText) {
@@ -290,7 +303,6 @@ app.post('/api/admin/promotions/create', verifyManagerToken, async (req, res) =>
   }
 });
 
-// Cashiers, Shift Managers, and Admins can toggle promo status (disable/enable)
 app.post('/api/promotions/toggle', verifyStaffToken, async (req, res) => {
   const { code, is_active } = req.body;
   try {
@@ -302,7 +314,6 @@ app.post('/api/promotions/toggle', verifyStaffToken, async (req, res) => {
   }
 });
 
-// Cashiers, Shift Managers, and Admins can delete promos
 app.post('/api/promotions/delete', verifyStaffToken, async (req, res) => {
   const { code } = req.body;
   try {
@@ -352,7 +363,7 @@ app.post('/api/admin/announcements/delete', verifyAdminToken, async (req, res) =
 });
 
 // ==============================================
-// Coupon Status Check (Handles 24hr Cooldown)
+// Coupon Status Check
 // ==============================================
 app.get('/api/coupon-status', async (req, res) => {
   const { code, customerId } = req.query;
@@ -474,10 +485,13 @@ app.get('/api/wallet/google/:code', async (req, res) => {
   }
 });
 
-// Redeem Coupon — Protected with verifyStaffToken & records staff username
+// ==============================================
+// 2. Auto-Assign Location on Redemption & Undo
+// ==============================================
 app.post('/api/redeem', verifyStaffToken, async (req, res) => {
   const { couponCode, customerId } = req.body;
   const staffUser = req.user ? req.user.username : 'unknown_staff';
+  const storeLocation = req.user && req.user.location ? req.user.location : 'Research';
 
   if (!couponCode) return res.status(400).json({ success: false, message: '❌ Coupon code required.' });
 
@@ -524,22 +538,26 @@ app.post('/api/redeem', verifyStaffToken, async (req, res) => {
       });
     }
 
-    // Insert redemption record with staff username attribution
-    await pool.query('INSERT INTO redemptions (coupon_code, customer_id, redeemed_by) VALUES ($1, $2, $3)', [code, customer, staffUser]);
+    // Insert redemption record auto-assigned to staff member's store location
+    await pool.query(
+      'INSERT INTO redemptions (coupon_code, customer_id, redeemed_by, location) VALUES ($1, $2, $3, $4)', 
+      [code, customer, staffUser, storeLocation]
+    );
     const unlocksAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     io.emit('couponRedeemed', { couponCode: code, customerId: customer, unlocksAt });
 
-    res.json({ success: true, message: `✅ Coupon "${code}" successfully redeemed for customer (${customer}) by ${staffUser}!` });
+    res.json({ success: true, message: `✅ Coupon "${code}" successfully redeemed for customer (${customer}) by ${staffUser} at ${storeLocation}!` });
   } catch (err) {
     res.status(500).json({ success: false, message: `Server error: ${err.message}` });
   }
 });
 
-// Reset Cooldown (Undo Scan) — Protected with verifyStaffToken & logs to undo_transactions
+// Reset Cooldown (Undo Scan) — Auto-assigned to staff member's store location
 app.post('/api/cashier/reset-cooldown', verifyStaffToken, async (req, res) => {
   const { couponCode, customerId } = req.body;
   const staffUser = req.user ? req.user.username : 'unknown_staff';
+  const storeLocation = req.user && req.user.location ? req.user.location : 'Research';
 
   if (!couponCode) return res.status(400).json({ success: false, message: 'Coupon code required.' });
 
@@ -558,14 +576,14 @@ app.post('/api/cashier/reset-cooldown', verifyStaffToken, async (req, res) => {
       [code, customer]
     );
 
-    // Record undo transaction in backend audit table
+    // Record undo transaction auto-assigned to staff member's store location
     await pool.query(
-      'INSERT INTO undo_transactions (coupon_code, customer_id, undone_by) VALUES ($1, $2, $3)',
-      [code, customer, staffUser]
+      'INSERT INTO undo_transactions (coupon_code, customer_id, undone_by, location) VALUES ($1, $2, $3, $4)',
+      [code, customer, staffUser, storeLocation]
     );
 
     io.emit('promoStateUpdated');
-    res.json({ success: true, message: `✅ Accidentally redeemed lock cleared for customer (${customer}) on "${code}" by ${staffUser}. Coupon reopened!` });
+    res.json({ success: true, message: `✅ Accidentally redeemed lock cleared for customer (${customer}) on "${code}" by ${staffUser} at ${storeLocation}. Coupon reopened!` });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

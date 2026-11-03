@@ -226,10 +226,10 @@
       <div id="loginStatus" class="alert-status"></div>
     </div>
 
-    <!-- Create Staff User -->
+    <!-- Create Staff User with Store Location -->
     <div class="card" id="createUserCard">
       <div class="card-title">👤 Create Staff Account</div>
-      <div class="card-subtitle">Create logins for shift managers or cashiers.</div>
+      <div class="card-subtitle">Create logins for shift managers or cashiers with assigned location.</div>
       
       <form id="createUserForm" onsubmit="handleCreateUser(event)">
         <div class="form-group">
@@ -245,6 +245,13 @@
           <select id="newUserRole">
             <option value="shift_manager">Shift Manager (Promos & Inventory)</option>
             <option value="cashier">Cashier (Redeem & Inventory Controls Only)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="newUserLocation">Store Location</label>
+          <select id="newUserLocation">
+            <option value="Research">📍 Research Location</option>
+            <option value="Parmer">📍 Parmer Location</option>
           </select>
         </div>
         <button type="submit" class="btn">Create User Account</button>
@@ -282,17 +289,17 @@
       <div id="redeemStatus" class="alert-status"></div>
     </div>
 
-    <!-- Admin View: Employee Redemption Activity -->
+    <!-- Admin View: Employee Redemption Activity (Research & Parmer) -->
     <div class="card" id="staffAuditCard" style="display: none;">
       <div class="card-title">📊 Employee Redemption Activity</div>
-      <div class="card-subtitle">Track all coupon redemptions processed by cashier staff.</div>
+      <div class="card-subtitle">Track all coupon redemptions across Research and Parmer locations.</div>
       <div id="staffAuditList" class="item-list"></div>
     </div>
 
-    <!-- Admin View: Undo Transaction Audit Log -->
+    <!-- Admin View: Undo Transaction Audit Log (Research & Parmer) -->
     <div class="card" id="undoAuditCard" style="display: none;">
       <div class="card-title">🔍 Staff Undo Audit Log</div>
-      <div class="card-subtitle">Track all transaction cancellations and resets performed by staff.</div>
+      <div class="card-subtitle">Track transaction cancellations and resets across Research and Parmer locations.</div>
       <div id="undoAuditList" class="item-list"></div>
     </div>
 
@@ -425,14 +432,14 @@
         const payload = parseJwt(token);
         const username = payload && payload.username ? payload.username : 'Admin';
         const role = payload && payload.role ? payload.role.toLowerCase() : 'admin';
-        const roleDisplay = role.replace('_', ' ').toUpperCase();
+        const location = payload && payload.location ? payload.location : 'Research';
+        const roleDisplay = `${role.replace('_', ' ').toUpperCase()} (${location})`;
 
-        statusEl.textContent = `Status: Logged in as ${username} (${roleDisplay})`;
+        statusEl.textContent = `Status: Logged in as ${username} — ${roleDisplay}`;
         statusEl.style.color = 'var(--accent-green)';
         if (logoutBtn) logoutBtn.style.display = 'inline-block';
-        if (loginCard) loginCard.style.display = 'none'; // Hide Login Box when authenticated
+        if (loginCard) loginCard.style.display = 'none';
 
-        // Show operational cards upon successful login
         if (redeemCard) redeemCard.style.display = 'block';
         if (inventoryCard) inventoryCard.style.display = 'block';
 
@@ -457,12 +464,11 @@
         statusEl.textContent = 'Status: Guest Mode (Authentication Required)';
         statusEl.style.color = 'var(--text-muted)';
         if (logoutBtn) logoutBtn.style.display = 'none';
-        if (loginCard) loginCard.style.display = 'block'; // Show Login Box in Guest Mode
+        if (loginCard) loginCard.style.display = 'block';
         if (managerSection) managerSection.style.display = 'none';
 
-        // Hide operational and management cards in Guest Mode
         if (createUserCard) createUserCard.style.display = 'none';
-        if (createPromoCard) createPromoCard.style.display = 'none';
+        if (createPromoCard) createUserCard.style.display = 'none';
         if (announcementCard) announcementCard.style.display = 'none';
         if (redeemCard) redeemCard.style.display = 'none';
         if (inventoryCard) inventoryCard.style.display = 'none';
@@ -519,6 +525,7 @@
       const newUsername = document.getElementById('newUsername').value.trim();
       const newPassword = document.getElementById('newPassword').value.trim();
       const role = document.getElementById('newUserRole').value;
+      const location = document.getElementById('newUserLocation').value;
 
       try {
         const res = await fetch('/api/admin/add-user', {
@@ -527,7 +534,7 @@
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ newUsername, newPassword, role })
+          body: JSON.stringify({ newUsername, newPassword, role, location })
         });
         const data = await res.json();
 
@@ -570,10 +577,12 @@
         data.users.forEach(user => {
           const div = document.createElement('div');
           div.className = 'list-item';
+          const loc = user.location || 'Research';
           div.innerHTML = `
             <div>
               <strong style="font-size:0.85rem; color:#fff;">${user.username}</strong>
               <span class="badge badge-active">${user.role ? user.role.toUpperCase() : 'STAFF'}</span>
+              <span class="badge ${loc === 'Parmer' ? 'badge-emergency' : 'badge-active'}">📍 ${loc}</span>
             </div>
             <button class="btn-danger" onclick="deleteShiftManager('${user.username}')">Delete</button>
           `;
@@ -632,17 +641,23 @@
           return;
         }
 
-        container.innerHTML = data.redemptions.map(r => `
-          <div class="list-item">
-            <div>
-              <strong style="font-size:0.85rem; color:#fff;">${r.coupon_code}</strong> 
-              <span style="font-size:0.75rem; color:var(--text-muted);">(Customer: ${r.customer_id})</span>
-              <p style="font-size:0.75rem; color:var(--accent-green); margin-top:4px;">
-                Processed by: <strong>${r.redeemed_by}</strong> at ${new Date(r.redeemed_at).toLocaleString()}
-              </p>
+        container.innerHTML = data.redemptions.map(r => {
+          const loc = r.location || 'Research';
+          return `
+            <div class="list-item">
+              <div style="width: 100%;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                  <strong style="font-size:0.85rem; color:#fff;">${r.coupon_code}</strong> 
+                  <span class="badge ${loc === 'Parmer' ? 'badge-emergency' : 'badge-active'}">📍 ${loc}</span>
+                </div>
+                <span style="font-size:0.75rem; color:var(--text-muted);">(Customer: ${r.customer_id})</span>
+                <p style="font-size:0.75rem; color:var(--accent-green); margin-top:4px;">
+                  Processed by: <strong>${r.redeemed_by}</strong> at ${new Date(r.redeemed_at).toLocaleString()}
+                </p>
+              </div>
             </div>
-          </div>
-        `).join('');
+          `;
+        }).join('');
       } catch (err) {
         console.error('Failed to load redemption history:', err);
       }
@@ -672,17 +687,23 @@
           return;
         }
 
-        container.innerHTML = data.undos.map(u => `
-          <div class="list-item">
-            <div>
-              <strong style="font-size:0.85rem; color:#fff;">${u.coupon_code}</strong> 
-              <span style="font-size:0.75rem; color:var(--text-muted);">(Customer: ${u.customer_id})</span>
-              <p style="font-size:0.75rem; color:var(--danger-red); margin-top:4px;">
-                Undone by: <strong>${u.undone_by}</strong> at ${new Date(u.undone_at).toLocaleString()}
-              </p>
+        container.innerHTML = data.undos.map(u => {
+          const loc = u.location || 'Research';
+          return `
+            <div class="list-item">
+              <div style="width: 100%;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                  <strong style="font-size:0.85rem; color:#fff;">${u.coupon_code}</strong> 
+                  <span class="badge ${loc === 'Parmer' ? 'badge-emergency' : 'badge-active'}">📍 ${loc}</span>
+                </div>
+                <span style="font-size:0.75rem; color:var(--text-muted);">(Customer: ${u.customer_id})</span>
+                <p style="font-size:0.75rem; color:var(--danger-red); margin-top:4px;">
+                  Undone by: <strong>${u.undone_by}</strong> at ${new Date(u.undone_at).toLocaleString()}
+                </p>
+              </div>
             </div>
-          </div>
-        `).join('');
+          `;
+        }).join('');
       } catch (err) {
         console.error('Failed to load undo history:', err);
       }
@@ -897,53 +918,57 @@
         const container = document.getElementById('promoList');
         container.innerHTML = '';
 
+        if (data.promotions.length === 0) {
+          container.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted);">No promotions found in database.</p>';
+          return;
+        }
+
+        const token = getAuthToken();
+        const payload = parseJwt(token);
+        const role = payload ? payload.role.toLowerCase() : 'guest';
+        const isCashierOrBetter = role === 'admin' || role === 'shift_manager' || role === 'cashier';
+
         data.promotions.forEach(promo => {
-          const item = document.createElement('div');
-          item.className = 'list-item';
+          const div = document.createElement('div');
+          div.className = 'list-item';
+          const isActive = promo.is_active;
 
-          const expDate = new Date(promo.expires_at).toLocaleDateString();
-          const badgeClass = promo.is_active ? 'badge-active' : 'badge-disabled';
-          const badgeText = promo.is_active ? 'ACTIVE' : 'DISABLED';
-
-          item.innerHTML = `
+          div.innerHTML = `
             <div>
-              <h4 style="font-size:0.9rem;">${promo.code} - ${promo.title} <span class="badge ${badgeClass}">${badgeText}</span></h4>
-              <p style="font-size:0.75rem; color:var(--text-muted);">Expires: ${expDate}</p>
+              <strong style="font-size:0.85rem; color:#fff;">${promo.code}</strong> - ${promo.title}
+              <span class="badge ${isActive ? 'badge-active' : 'badge-disabled'}">${isActive ? 'ACTIVE' : 'DISABLED'}</span>
+              <p style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">${promo.discount_text} | Location: ${promo.location || 'all'}</p>
             </div>
-            <div style="display:flex; gap:6px;">
-              <button class="btn-secondary" onclick="togglePromo('${promo.code}', ${promo.is_active})">
-                ${promo.is_active ? 'Disable' : 'Enable'}
-              </button>
-              <button class="btn-danger" onclick="deletePromo('${promo.code}')">Delete</button>
-            </div>
+            ${isCashierOrBetter ? `
+              <div style="display: flex; gap: 8px;">
+                <button class="btn-secondary" onclick="togglePromo('${promo.code}', ${!isActive})">${isActive ? 'Disable' : 'Enable'}</button>
+                <button class="btn-danger" onclick="deletePromo('${promo.code}')">Delete</button>
+              </div>
+            ` : ''}
           `;
-          container.appendChild(item);
+          container.appendChild(div);
         });
       } catch (err) {
-        console.error('Error loading promotions:', err);
+        console.error('Failed loading promotions:', err);
       }
     }
 
-    async function togglePromo(code, currentState) {
+    async function togglePromo(code, newState) {
       const token = getAuthToken();
       if (!token) return alert('Staff login required.');
-
       try {
         const res = await fetch('/api/promotions/toggle', {
           method: 'POST',
-          headers: { 
+          headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ code, is_active: !currentState })
+          body: JSON.stringify({ code, is_active: newState })
         });
         const data = await res.json();
-        if (!data.success) {
-          alert(data.message || 'Failed to toggle promotion.');
-        }
-        loadPromotions();
+        if (!data.success) alert(data.message);
       } catch (err) {
-        alert('Failed to toggle promotion.');
+        alert('Failed to update promotion status.');
       }
     }
 
@@ -951,20 +976,17 @@
       const token = getAuthToken();
       if (!token) return alert('Staff login required.');
       if (!confirm(`Are you sure you want to delete promotion "${code}"?`)) return;
-
       try {
         const res = await fetch('/api/promotions/delete', {
           method: 'POST',
-          headers: { 
+          headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({ code })
         });
-
         const data = await res.json();
-        alert(data.message);
-        if (data.success) loadPromotions();
+        if (!data.success) alert(data.message);
       } catch (err) {
         alert('Failed to delete promotion.');
       }
