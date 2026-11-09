@@ -289,31 +289,39 @@
       <div id="redeemStatus" class="alert-status"></div>
     </div>
 
-    <!-- Admin View: Employee Redemption Activity (Day-Wise + Text & Date Search) -->
+    <!-- Admin View: Employee Redemption Activity (Date Range + Text Search) -->
     <div class="card" id="staffAuditCard" style="display: none;">
       <div class="card-title">📊 Employee Redemption Activity</div>
-      <div class="card-subtitle">Track coupon redemptions (Default: Last 5 Days | Use date picker for older records).</div>
+      <div class="card-subtitle">Track coupon redemptions (Default: Last 5 Days | Select Start & End dates for custom range).</div>
       
-      <!-- Search Engine Filter & Date Picker -->
-      <div style="display: flex; gap: 8px; margin-bottom: 14px;">
-        <input type="text" id="redemptionSearch" placeholder="🔍 Search phone, customer, cashier, promo..." oninput="renderRedemptions()" style="flex: 2;">
-        <input type="date" id="redemptionDateFilter" onchange="renderRedemptions()" style="flex: 1; background: #0b0d12; color: #fff; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 0.85rem;">
-        <button type="button" class="btn-secondary" onclick="clearRedemptionDate()" title="Reset to 5-day view" style="padding: 8px 10px; font-size: 0.75rem;">Clear</button>
+      <!-- Search Engine Filter & Date Range Pickers -->
+      <div style="display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; align-items: center;">
+        <input type="text" id="redemptionSearch" placeholder="🔍 Search phone, customer, cashier, promo..." oninput="renderRedemptions()" style="flex: 2; min-width: 140px;">
+        <div style="display: flex; align-items: center; gap: 4px; flex: 2; min-width: 200px;">
+          <input type="date" id="redemptionStartDate" onchange="renderRedemptions()" style="background: #0b0d12; color: #fff; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 0.75rem; width: 100%;" title="Start Date">
+          <span style="font-size: 0.75rem; color: var(--text-muted);">to</span>
+          <input type="date" id="redemptionEndDate" onchange="renderRedemptions()" style="background: #0b0d12; color: #fff; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 0.75rem; width: 100%;" title="End Date">
+        </div>
+        <button type="button" class="btn-secondary" onclick="clearRedemptionFilters()" title="Reset filters" style="padding: 8px 10px; font-size: 0.75rem;">Reset</button>
       </div>
 
       <div id="staffAuditList" class="item-list"></div>
     </div>
 
-    <!-- Admin View: Undo Transaction Audit Log (Day-Wise + Text & Date Search) -->
+    <!-- Admin View: Undo Transaction Audit Log (Date Range + Text Search) -->
     <div class="card" id="undoAuditCard" style="display: none;">
       <div class="card-title">🔍 Staff Undo Audit Log</div>
-      <div class="card-subtitle">Track transaction cancellations (Default: Last 5 Days | Use date picker for older records).</div>
+      <div class="card-subtitle">Track transaction cancellations (Default: Last 5 Days | Select Start & End dates for custom range).</div>
       
-      <!-- Search Engine Filter & Date Picker -->
-      <div style="display: flex; gap: 8px; margin-bottom: 14px;">
-        <input type="text" id="undoSearch" placeholder="🔍 Search phone, customer, staff, promo..." oninput="renderUndos()" style="flex: 2;">
-        <input type="date" id="undoDateFilter" onchange="renderUndos()" style="flex: 1; background: #0b0d12; color: #fff; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 0.85rem;">
-        <button type="button" class="btn-secondary" onclick="clearUndoDate()" title="Reset to 5-day view" style="padding: 8px 10px; font-size: 0.75rem;">Clear</button>
+      <!-- Search Engine Filter & Date Range Pickers -->
+      <div style="display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; align-items: center;">
+        <input type="text" id="undoSearch" placeholder="🔍 Search phone, customer, staff, promo..." oninput="renderUndos()" style="flex: 2; min-width: 140px;">
+        <div style="display: flex; align-items: center; gap: 4px; flex: 2; min-width: 200px;">
+          <input type="date" id="undoStartDate" onchange="renderUndos()" style="background: #0b0d12; color: #fff; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 0.75rem; width: 100%;" title="Start Date">
+          <span style="font-size: 0.75rem; color: var(--text-muted);">to</span>
+          <input type="date" id="undoEndDate" onchange="renderUndos()" style="background: #0b0d12; color: #fff; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 0.75rem; width: 100%;" title="End Date">
+        </div>
+        <button type="button" class="btn-secondary" onclick="clearUndoFilters()" title="Reset filters" style="padding: 8px 10px; font-size: 0.75rem;">Reset</button>
       </div>
 
       <div id="undoAuditList" class="item-list"></div>
@@ -663,35 +671,40 @@
       }
     }
 
-    function clearRedemptionDate() {
-      document.getElementById('redemptionDateFilter').value = '';
+    function clearRedemptionFilters() {
+      document.getElementById('redemptionSearch').value = '';
+      document.getElementById('redemptionStartDate').value = '';
+      document.getElementById('redemptionEndDate').value = '';
       renderRedemptions();
     }
 
     function renderRedemptions() {
       const container = document.getElementById('staffAuditList');
       const searchInput = document.getElementById('redemptionSearch');
-      const dateInput = document.getElementById('redemptionDateFilter');
+      const startDateInput = document.getElementById('redemptionStartDate');
+      const endDateInput = document.getElementById('redemptionEndDate');
+      
       const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
-      const selectedDate = dateInput ? dateInput.value : ''; // "YYYY-MM-DD"
+      const startDateStr = startDateInput ? startDateInput.value : ''; // "YYYY-MM-DD"
+      const endDateStr = endDateInput ? endDateInput.value : '';         // "YYYY-MM-DD"
 
       if (!container) return;
 
-      const fiveDaysAgo = new Date();
-      fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
-      fiveDaysAgo.setHours(0, 0, 0, 0);
-
       const filtered = allRedemptions.filter(r => {
         const recordDate = new Date(r.redeemed_at);
+        const y = recordDate.getFullYear();
+        const m = String(recordDate.getMonth() + 1).padStart(2, '0');
+        const d = String(recordDate.getDate()).padStart(2, '0');
+        const recYMD = `${y}-${m}-${d}`;
 
-        // If a specific date is selected, filter strictly for that date. Otherwise, use 5-day window.
-        if (selectedDate) {
-          const y = recordDate.getFullYear();
-          const m = String(recordDate.getMonth() + 1).padStart(2, '0');
-          const d = String(recordDate.getDate()).padStart(2, '0');
-          const recYMD = `${y}-${m}-${d}`;
-          if (recYMD !== selectedDate) return false;
+        // If date range is provided, filter strictly by range. Otherwise default to last 5 days.
+        if (startDateStr || endDateStr) {
+          if (startDateStr && recYMD < startDateStr) return false;
+          if (endDateStr && recYMD > endDateStr) return false;
         } else {
+          const fiveDaysAgo = new Date();
+          fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+          fiveDaysAgo.setHours(0, 0, 0, 0);
           if (recordDate < fiveDaysAgo) return false;
         }
 
@@ -703,7 +716,7 @@
       });
 
       if (filtered.length === 0) {
-        container.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted); text-align:center; padding: 12px;">No redemptions found matching your search or date filter.</p>';
+        container.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted); text-align:center; padding: 12px;">No redemptions found matching your search or date range.</p>';
         return;
       }
 
@@ -782,35 +795,39 @@
       }
     }
 
-    function clearUndoDate() {
-      document.getElementById('undoDateFilter').value = '';
+    function clearUndoFilters() {
+      document.getElementById('undoSearch').value = '';
+      document.getElementById('undoStartDate').value = '';
+      document.getElementById('undoEndDate').value = '';
       renderUndos();
     }
 
     function renderUndos() {
       const container = document.getElementById('undoAuditList');
       const searchInput = document.getElementById('undoSearch');
-      const dateInput = document.getElementById('undoDateFilter');
+      const startDateInput = document.getElementById('undoStartDate');
+      const endDateInput = document.getElementById('undoEndDate');
+      
       const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
-      const selectedDate = dateInput ? dateInput.value : ''; // "YYYY-MM-DD"
+      const startDateStr = startDateInput ? startDateInput.value : ''; // "YYYY-MM-DD"
+      const endDateStr = endDateInput ? endDateInput.value : '';         // "YYYY-MM-DD"
 
       if (!container) return;
 
-      const fiveDaysAgo = new Date();
-      fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
-      fiveDaysAgo.setHours(0, 0, 0, 0);
-
       const filtered = allUndos.filter(u => {
         const recordDate = new Date(u.undone_at);
+        const y = recordDate.getFullYear();
+        const m = String(recordDate.getMonth() + 1).padStart(2, '0');
+        const d = String(recordDate.getDate()).padStart(2, '0');
+        const recYMD = `${y}-${m}-${d}`;
 
-        // If a specific date is selected, filter strictly for that date. Otherwise, use 5-day window.
-        if (selectedDate) {
-          const y = recordDate.getFullYear();
-          const m = String(recordDate.getMonth() + 1).padStart(2, '0');
-          const d = String(recordDate.getDate()).padStart(2, '0');
-          const recYMD = `${y}-${m}-${d}`;
-          if (recYMD !== selectedDate) return false;
+        if (startDateStr || endDateStr) {
+          if (startDateStr && recYMD < startDateStr) return false;
+          if (endDateStr && recYMD > endDateStr) return false;
         } else {
+          const fiveDaysAgo = new Date();
+          fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+          fiveDaysAgo.setHours(0, 0, 0, 0);
           if (recordDate < fiveDaysAgo) return false;
         }
 
@@ -822,7 +839,7 @@
       });
 
       if (filtered.length === 0) {
-        container.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted); text-align:center; padding: 12px;">No undo transactions found matching your search or date filter.</p>';
+        container.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted); text-align:center; padding: 12px;">No undo transactions found matching your search or date range.</p>';
         return;
       }
 
