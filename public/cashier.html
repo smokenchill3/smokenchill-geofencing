@@ -289,39 +289,39 @@
       <div id="redeemStatus" class="alert-status"></div>
     </div>
 
-    <!-- Admin View: Employee Redemption Activity (Date Range + Text Search) -->
+    <!-- Admin View: Employee Redemption Activity (Vertical Stacked Filters) -->
     <div class="card" id="staffAuditCard" style="display: none;">
       <div class="card-title">📊 Employee Redemption Activity</div>
-      <div class="card-subtitle">Track coupon redemptions (Default: Last 5 Days | Select Start & End dates for custom range).</div>
+      <div class="card-subtitle">Track redemptions (Default: Last 5 Days | Select date range for custom view).</div>
       
-      <!-- Search Engine Filter & Date Range Pickers -->
-      <div style="display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; align-items: center;">
-        <input type="text" id="redemptionSearch" placeholder="🔍 Search phone, customer, cashier, promo..." oninput="renderRedemptions()" style="flex: 2; min-width: 140px;">
-        <div style="display: flex; align-items: center; gap: 4px; flex: 2; min-width: 200px;">
-          <input type="date" id="redemptionStartDate" onchange="renderRedemptions()" style="background: #0b0d12; color: #fff; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 0.75rem; width: 100%;" title="Start Date">
-          <span style="font-size: 0.75rem; color: var(--text-muted);">to</span>
-          <input type="date" id="redemptionEndDate" onchange="renderRedemptions()" style="background: #0b0d12; color: #fff; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 0.75rem; width: 100%;" title="End Date">
+      <!-- Clean Stacked Filter Layout -->
+      <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px;">
+        <input type="text" id="redemptionSearch" placeholder="🔍 Search phone, customer, cashier, promo..." oninput="renderRedemptions()" style="width: 100%;">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <input type="date" id="redemptionStartDate" onchange="renderRedemptions()" style="background: #0b0d12; color: #fff; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 0.8rem; flex: 1; width: 100%;" title="Start Date">
+          <span style="font-size: 0.75rem; color: var(--text-muted); padding: 0 2px;">to</span>
+          <input type="date" id="redemptionEndDate" onchange="renderRedemptions()" style="background: #0b0d12; color: #fff; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 0.8rem; flex: 1; width: 100%;" title="End Date">
+          <button type="button" class="btn-secondary" onclick="clearRedemptionFilters()" title="Reset filters" style="padding: 10px 14px; font-size: 0.8rem; white-space: nowrap;">Reset</button>
         </div>
-        <button type="button" class="btn-secondary" onclick="clearRedemptionFilters()" title="Reset filters" style="padding: 8px 10px; font-size: 0.75rem;">Reset</button>
       </div>
 
       <div id="staffAuditList" class="item-list"></div>
     </div>
 
-    <!-- Admin View: Undo Transaction Audit Log (Date Range + Text Search) -->
+    <!-- Admin View: Undo Transaction Audit Log (Vertical Stacked Filters) -->
     <div class="card" id="undoAuditCard" style="display: none;">
       <div class="card-title">🔍 Staff Undo Audit Log</div>
-      <div class="card-subtitle">Track transaction cancellations (Default: Last 5 Days | Select Start & End dates for custom range).</div>
+      <div class="card-subtitle">Track cancellations (Default: Last 5 Days | Select date range for custom view).</div>
       
-      <!-- Search Engine Filter & Date Range Pickers -->
-      <div style="display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; align-items: center;">
-        <input type="text" id="undoSearch" placeholder="🔍 Search phone, customer, staff, promo..." oninput="renderUndos()" style="flex: 2; min-width: 140px;">
-        <div style="display: flex; align-items: center; gap: 4px; flex: 2; min-width: 200px;">
-          <input type="date" id="undoStartDate" onchange="renderUndos()" style="background: #0b0d12; color: #fff; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 0.75rem; width: 100%;" title="Start Date">
-          <span style="font-size: 0.75rem; color: var(--text-muted);">to</span>
-          <input type="date" id="undoEndDate" onchange="renderUndos()" style="background: #0b0d12; color: #fff; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 0.75rem; width: 100%;" title="End Date">
+      <!-- Clean Stacked Filter Layout -->
+      <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px;">
+        <input type="text" id="undoSearch" placeholder="🔍 Search phone, customer, staff, promo..." oninput="renderUndos()" style="width: 100%;">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <input type="date" id="undoStartDate" onchange="renderUndos()" style="background: #0b0d12; color: #fff; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 0.8rem; flex: 1; width: 100%;" title="Start Date">
+          <span style="font-size: 0.75rem; color: var(--text-muted); padding: 0 2px;">to</span>
+          <input type="date" id="undoEndDate" onchange="renderUndos()" style="background: #0b0d12; color: #fff; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 0.8rem; flex: 1; width: 100%;" title="End Date">
+          <button type="button" class="btn-secondary" onclick="clearUndoFilters()" title="Reset filters" style="padding: 10px 14px; font-size: 0.8rem; white-space: nowrap;">Reset</button>
         </div>
-        <button type="button" class="btn-secondary" onclick="clearUndoFilters()" title="Reset filters" style="padding: 8px 10px; font-size: 0.75rem;">Reset</button>
       </div>
 
       <div id="undoAuditList" class="item-list"></div>
@@ -495,7 +495,7 @@
 
         if (createUserCard) createUserCard.style.display = 'none';
         if (createPromoCard) createUserCard.style.display = 'none';
-        if (announcementCard) announcementCard.style.display = 'none';
+        if (announcementCard) createUserCard.style.display = 'none';
         if (redeemCard) redeemCard.style.display = 'none';
         if (inventoryCard) inventoryCard.style.display = 'none';
         if (staffAuditCard) staffAuditCard.style.display = 'none';
@@ -697,7 +697,6 @@
         const d = String(recordDate.getDate()).padStart(2, '0');
         const recYMD = `${y}-${m}-${d}`;
 
-        // If date range is provided, filter strictly by range. Otherwise default to last 5 days.
         if (startDateStr || endDateStr) {
           if (startDateStr && recYMD < startDateStr) return false;
           if (endDateStr && recYMD > endDateStr) return false;
