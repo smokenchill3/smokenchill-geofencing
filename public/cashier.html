@@ -451,7 +451,7 @@
           if (undoAuditCard) undoAuditCard.style.display = 'none';
         } else {
           if (createUserCard) createUserCard.style.display = 'block';
-          if (createPromoCard) createPromoCard.style.display = 'block';
+          if (createPromoCard) createUserCard.style.display = 'block';
           if (announcementCard) announcementCard.style.display = 'block';
           if (staffAuditCard) staffAuditCard.style.display = 'block';
           if (undoAuditCard) undoAuditCard.style.display = 'block';
@@ -481,6 +481,7 @@
       localStorage.removeItem('adminToken');
       showStatus('loginStatus', 'Logged out successfully.', true);
       updateSessionUI();
+      loadPromotions();
     }
 
     function showStatus(elementId, message, isSuccess) {
@@ -507,6 +508,7 @@
           localStorage.setItem('adminToken', data.token);
           showStatus('loginStatus', 'Login successful!', true);
           updateSessionUI();
+          loadPromotions();
           loadRedemptionAudit();
           loadUndoHistory();
         } else {
