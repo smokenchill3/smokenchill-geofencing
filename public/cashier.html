@@ -495,7 +495,7 @@
 
         if (createUserCard) createUserCard.style.display = 'none';
         if (createPromoCard) createUserCard.style.display = 'none';
-        if (announcementCard) createUserCard.style.display = 'none';
+        if (announcementCard) announcementCard.style.display = 'none';
         if (redeemCard) redeemCard.style.display = 'none';
         if (inventoryCard) inventoryCard.style.display = 'none';
         if (staffAuditCard) staffAuditCard.style.display = 'none';
@@ -505,6 +505,11 @@
 
     function handleLogout() {
       localStorage.removeItem('adminToken');
+      
+      // Clear username and password inputs on logout
+      const loginForm = document.getElementById('loginForm');
+      if (loginForm) loginForm.reset();
+
       showStatus('loginStatus', 'Logged out successfully.', true);
       updateSessionUI();
       loadPromotions();
@@ -685,8 +690,8 @@
       const endDateInput = document.getElementById('redemptionEndDate');
       
       const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
-      const startDateStr = startDateInput ? startDateInput.value : ''; // "YYYY-MM-DD"
-      const endDateStr = endDateInput ? endDateInput.value : '';         // "YYYY-MM-DD"
+      const startDateStr = startDateInput ? startDateInput.value : ''; 
+      const endDateStr = endDateInput ? endDateInput.value : '';         
 
       if (!container) return;
 
@@ -808,8 +813,8 @@
       const endDateInput = document.getElementById('undoEndDate');
       
       const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
-      const startDateStr = startDateInput ? startDateInput.value : ''; // "YYYY-MM-DD"
-      const endDateStr = endDateInput ? endDateInput.value : '';         // "YYYY-MM-DD"
+      const startDateStr = startDateInput ? startDateInput.value : ''; 
+      const endDateStr = endDateInput ? endDateInput.value : '';         
 
       if (!container) return;
 
