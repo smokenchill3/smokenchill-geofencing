@@ -289,17 +289,29 @@
       <div id="redeemStatus" class="alert-status"></div>
     </div>
 
-    <!-- Admin View: Employee Redemption Activity (Research & Parmer) -->
+    <!-- Admin View: Employee Redemption Activity (Day-Wise + Search) -->
     <div class="card" id="staffAuditCard" style="display: none;">
       <div class="card-title">📊 Employee Redemption Activity</div>
-      <div class="card-subtitle">Track all coupon redemptions across Research and Parmer locations.</div>
+      <div class="card-subtitle">Track coupon redemptions grouped by day across Research and Parmer.</div>
+      
+      <!-- Search Engine Filter -->
+      <div class="form-group" style="margin-bottom: 14px;">
+        <input type="text" id="redemptionSearch" placeholder="🔍 Search by phone, customer, cashier, or promo..." oninput="renderRedemptions()">
+      </div>
+
       <div id="staffAuditList" class="item-list"></div>
     </div>
 
-    <!-- Admin View: Undo Transaction Audit Log (Research & Parmer) -->
+    <!-- Admin View: Undo Transaction Audit Log (Day-Wise + Search) -->
     <div class="card" id="undoAuditCard" style="display: none;">
       <div class="card-title">🔍 Staff Undo Audit Log</div>
-      <div class="card-subtitle">Track transaction cancellations and resets across Research and Parmer locations.</div>
+      <div class="card-subtitle">Track transaction cancellations grouped by day across Research and Parmer.</div>
+      
+      <!-- Search Engine Filter -->
+      <div class="form-group" style="margin-bottom: 14px;">
+        <input type="text" id="undoSearch" placeholder="🔍 Search by phone, customer, staff, or promo..." oninput="renderUndos()">
+      </div>
+
       <div id="undoAuditList" class="item-list"></div>
     </div>
 
@@ -376,6 +388,8 @@
     let lastScannedData = null;
     let undoTimeout = null;
     let countdownInterval = null;
+    let allRedemptions = [];
+    let allUndos = [];
 
     document.addEventListener('DOMContentLoaded', () => {
       updateSessionUI();
@@ -445,13 +459,13 @@
 
         if (role === 'cashier') {
           if (createUserCard) createUserCard.style.display = 'none';
-          if (createPromoCard) createPromoCard.style.display = 'none';
+          if (createPromoCard) createUserCard.style.display = 'none';
           if (announcementCard) announcementCard.style.display = 'none';
           if (staffAuditCard) staffAuditCard.style.display = 'none';
           if (undoAuditCard) undoAuditCard.style.display = 'none';
         } else {
           if (createUserCard) createUserCard.style.display = 'block';
-          if (createPromoCard) createUserCard.style.display = 'block';
+          if (createPromoCard) createPromoCard.style.display = 'block';
           if (announcementCard) announcementCard.style.display = 'block';
           if (staffAuditCard) staffAuditCard.style.display = 'block';
           if (undoAuditCard) undoAuditCard.style.display = 'block';
@@ -638,15 +652,59 @@
         });
         const data = await res.json();
 
-        if (!data.success || !data.redemptions || data.redemptions.length === 0) {
-          container.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted);">No redemptions recorded.</p>';
-          return;
-        }
+        allRedemptions = (data.success && data.redemptions) ? data.redemptions : [];
+        renderRedemptions();
+      } catch (err) {
+        console.error('Failed to load redemption history:', err);
+      }
+    }
 
-        container.innerHTML = data.redemptions.map(r => {
+    function renderRedemptions() {
+      const container = document.getElementById('staffAuditList');
+      const searchInput = document.getElementById('redemptionSearch');
+      const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
+      if (!container) return;
+
+      const filtered = allRedemptions.filter(r => {
+        const code = (r.coupon_code || '').toLowerCase();
+        const customer = (r.customer_id || '').toLowerCase();
+        const cashier = (r.redeemed_by || '').toLowerCase();
+        const loc = (r.location || '').toLowerCase();
+        return code.includes(query) || customer.includes(query) || cashier.includes(query) || loc.includes(query);
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted); text-align:center; padding: 12px;">No redemptions found matching your search.</p>';
+        return;
+      }
+
+      const groupedByDay = {};
+      filtered.forEach(r => {
+        const dateObj = new Date(r.redeemed_at);
+        const dayKey = dateObj.toLocaleDateString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric', year: 'numeric' });
+        if (!groupedByDay[dayKey]) {
+          groupedByDay[dayKey] = [];
+        }
+        groupedByDay[dayKey].push(r);
+      });
+
+      let html = '';
+      for (const [day, records] of Object.entries(groupedByDay)) {
+        html += `
+          <div style="margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; background: #12151d; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); margin-bottom: 8px;">
+              <span style="font-size: 0.8rem; font-weight: 700; color: var(--accent-green);">📅 ${day}</span>
+              <span class="badge badge-active" style="font-size: 0.75rem;">Total Today: ${records.length}</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+        `;
+
+        records.forEach(r => {
           const loc = r.location || 'Research';
-          return `
-            <div class="list-item">
+          const timeStr = new Date(r.redeemed_at).toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true });
+          html += `
+            <div class="list-item" style="margin-left: 2px; margin-right: 2px;">
               <div style="width: 100%;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                   <strong style="font-size:0.85rem; color:#fff;">${r.coupon_code}</strong> 
@@ -654,15 +712,20 @@
                 </div>
                 <span style="font-size:0.75rem; color:var(--text-muted);">(Customer: ${r.customer_id})</span>
                 <p style="font-size:0.75rem; color:var(--accent-green); margin-top:4px;">
-                  Processed by: <strong>${r.redeemed_by}</strong> at ${new Date(r.redeemed_at).toLocaleString()}
+                  Processed by: <strong>${r.redeemed_by}</strong> at ${timeStr}
                 </p>
               </div>
             </div>
           `;
-        }).join('');
-      } catch (err) {
-        console.error('Failed to load redemption history:', err);
+        });
+
+        html += `
+            </div>
+          </div>
+        `;
       }
+
+      container.innerHTML = html;
     }
 
     async function loadUndoHistory() {
@@ -684,15 +747,59 @@
         });
         const data = await res.json();
 
-        if (!data.success || !data.undos || data.undos.length === 0) {
-          container.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted);">No undo transactions recorded.</p>';
-          return;
-        }
+        allUndos = (data.success && data.undos) ? data.undos : [];
+        renderUndos();
+      } catch (err) {
+        console.error('Failed to load undo history:', err);
+      }
+    }
 
-        container.innerHTML = data.undos.map(u => {
+    function renderUndos() {
+      const container = document.getElementById('undoAuditList');
+      const searchInput = document.getElementById('undoSearch');
+      const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
+      if (!container) return;
+
+      const filtered = allUndos.filter(u => {
+        const code = (u.coupon_code || '').toLowerCase();
+        const customer = (u.customer_id || '').toLowerCase();
+        const staff = (u.undone_by || '').toLowerCase();
+        const loc = (u.location || '').toLowerCase();
+        return code.includes(query) || customer.includes(query) || staff.includes(query) || loc.includes(query);
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted); text-align:center; padding: 12px;">No undo transactions found matching your search.</p>';
+        return;
+      }
+
+      const groupedByDay = {};
+      filtered.forEach(u => {
+        const dateObj = new Date(u.undone_at);
+        const dayKey = dateObj.toLocaleDateString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric', year: 'numeric' });
+        if (!groupedByDay[dayKey]) {
+          groupedByDay[dayKey] = [];
+        }
+        groupedByDay[dayKey].push(u);
+      });
+
+      let html = '';
+      for (const [day, records] of Object.entries(groupedByDay)) {
+        html += `
+          <div style="margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; background: #12151d; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); margin-bottom: 8px;">
+              <span style="font-size: 0.8rem; font-weight: 700; color: var(--danger-red);">📅 ${day}</span>
+              <span class="badge badge-emergency" style="font-size: 0.75rem;">Total Today: ${records.length}</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+        `;
+
+        records.forEach(u => {
           const loc = u.location || 'Research';
-          return `
-            <div class="list-item">
+          const timeStr = new Date(u.undone_at).toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true });
+          html += `
+            <div class="list-item" style="margin-left: 2px; margin-right: 2px;">
               <div style="width: 100%;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                   <strong style="font-size:0.85rem; color:#fff;">${u.coupon_code}</strong> 
@@ -700,15 +807,20 @@
                 </div>
                 <span style="font-size:0.75rem; color:var(--text-muted);">(Customer: ${u.customer_id})</span>
                 <p style="font-size:0.75rem; color:var(--danger-red); margin-top:4px;">
-                  Undone by: <strong>${u.undone_by}</strong> at ${new Date(u.undone_at).toLocaleString()}
+                  Undone by: <strong>${u.undone_by}</strong> at ${timeStr}
                 </p>
               </div>
             </div>
           `;
-        }).join('');
-      } catch (err) {
-        console.error('Failed to load undo history:', err);
+        });
+
+        html += `
+            </div>
+          </div>
+        `;
       }
+
+      container.innerHTML = html;
     }
 
     async function handleRedeem(e) {
