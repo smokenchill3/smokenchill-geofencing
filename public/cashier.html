@@ -289,27 +289,31 @@
       <div id="redeemStatus" class="alert-status"></div>
     </div>
 
-    <!-- Admin View: Employee Redemption Activity (Last 5 Days + Search) -->
+    <!-- Admin View: Employee Redemption Activity (Day-Wise + Text & Date Search) -->
     <div class="card" id="staffAuditCard" style="display: none;">
-      <div class="card-title">📊 Employee Redemption Activity (Last 5 Days)</div>
-      <div class="card-subtitle">Track coupon redemptions grouped by day across Research and Parmer.</div>
+      <div class="card-title">📊 Employee Redemption Activity</div>
+      <div class="card-subtitle">Track coupon redemptions (Default: Last 5 Days | Use date picker for older records).</div>
       
-      <!-- Search Engine Filter -->
-      <div class="form-group" style="margin-bottom: 14px;">
-        <input type="text" id="redemptionSearch" placeholder="🔍 Search by phone, customer, cashier, or promo..." oninput="renderRedemptions()">
+      <!-- Search Engine Filter & Date Picker -->
+      <div style="display: flex; gap: 8px; margin-bottom: 14px;">
+        <input type="text" id="redemptionSearch" placeholder="🔍 Search phone, customer, cashier, promo..." oninput="renderRedemptions()" style="flex: 2;">
+        <input type="date" id="redemptionDateFilter" onchange="renderRedemptions()" style="flex: 1; background: #0b0d12; color: #fff; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 0.85rem;">
+        <button type="button" class="btn-secondary" onclick="clearRedemptionDate()" title="Reset to 5-day view" style="padding: 8px 10px; font-size: 0.75rem;">Clear</button>
       </div>
 
       <div id="staffAuditList" class="item-list"></div>
     </div>
 
-    <!-- Admin View: Undo Transaction Audit Log (Last 5 Days + Search) -->
+    <!-- Admin View: Undo Transaction Audit Log (Day-Wise + Text & Date Search) -->
     <div class="card" id="undoAuditCard" style="display: none;">
-      <div class="card-title">🔍 Staff Undo Audit Log (Last 5 Days)</div>
-      <div class="card-subtitle">Track transaction cancellations grouped by day across Research and Parmer.</div>
+      <div class="card-title">🔍 Staff Undo Audit Log</div>
+      <div class="card-subtitle">Track transaction cancellations (Default: Last 5 Days | Use date picker for older records).</div>
       
-      <!-- Search Engine Filter -->
-      <div class="form-group" style="margin-bottom: 14px;">
-        <input type="text" id="undoSearch" placeholder="🔍 Search by phone, customer, staff, or promo..." oninput="renderUndos()">
+      <!-- Search Engine Filter & Date Picker -->
+      <div style="display: flex; gap: 8px; margin-bottom: 14px;">
+        <input type="text" id="undoSearch" placeholder="🔍 Search phone, customer, staff, promo..." oninput="renderUndos()" style="flex: 2;">
+        <input type="date" id="undoDateFilter" onchange="renderUndos()" style="flex: 1; background: #0b0d12; color: #fff; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 0.85rem;">
+        <button type="button" class="btn-secondary" onclick="clearUndoDate()" title="Reset to 5-day view" style="padding: 8px 10px; font-size: 0.75rem;">Clear</button>
       </div>
 
       <div id="undoAuditList" class="item-list"></div>
@@ -659,21 +663,37 @@
       }
     }
 
+    function clearRedemptionDate() {
+      document.getElementById('redemptionDateFilter').value = '';
+      renderRedemptions();
+    }
+
     function renderRedemptions() {
       const container = document.getElementById('staffAuditList');
       const searchInput = document.getElementById('redemptionSearch');
+      const dateInput = document.getElementById('redemptionDateFilter');
       const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+      const selectedDate = dateInput ? dateInput.value : ''; // "YYYY-MM-DD"
 
       if (!container) return;
 
-      // Calculate cutoff date: 5 days ago (start of day)
       const fiveDaysAgo = new Date();
       fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
       fiveDaysAgo.setHours(0, 0, 0, 0);
 
       const filtered = allRedemptions.filter(r => {
         const recordDate = new Date(r.redeemed_at);
-        if (recordDate < fiveDaysAgo) return false; // Hide records older than 5 days
+
+        // If a specific date is selected, filter strictly for that date. Otherwise, use 5-day window.
+        if (selectedDate) {
+          const y = recordDate.getFullYear();
+          const m = String(recordDate.getMonth() + 1).padStart(2, '0');
+          const d = String(recordDate.getDate()).padStart(2, '0');
+          const recYMD = `${y}-${m}-${d}`;
+          if (recYMD !== selectedDate) return false;
+        } else {
+          if (recordDate < fiveDaysAgo) return false;
+        }
 
         const code = (r.coupon_code || '').toLowerCase();
         const customer = (r.customer_id || '').toLowerCase();
@@ -683,7 +703,7 @@
       });
 
       if (filtered.length === 0) {
-        container.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted); text-align:center; padding: 12px;">No redemptions found in the last 5 days matching your search.</p>';
+        container.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted); text-align:center; padding: 12px;">No redemptions found matching your search or date filter.</p>';
         return;
       }
 
@@ -762,21 +782,37 @@
       }
     }
 
+    function clearUndoDate() {
+      document.getElementById('undoDateFilter').value = '';
+      renderUndos();
+    }
+
     function renderUndos() {
       const container = document.getElementById('undoAuditList');
       const searchInput = document.getElementById('undoSearch');
+      const dateInput = document.getElementById('undoDateFilter');
       const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+      const selectedDate = dateInput ? dateInput.value : ''; // "YYYY-MM-DD"
 
       if (!container) return;
 
-      // Calculate cutoff date: 5 days ago (start of day)
       const fiveDaysAgo = new Date();
       fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
       fiveDaysAgo.setHours(0, 0, 0, 0);
 
       const filtered = allUndos.filter(u => {
         const recordDate = new Date(u.undone_at);
-        if (recordDate < fiveDaysAgo) return false; // Hide records older than 5 days
+
+        // If a specific date is selected, filter strictly for that date. Otherwise, use 5-day window.
+        if (selectedDate) {
+          const y = recordDate.getFullYear();
+          const m = String(recordDate.getMonth() + 1).padStart(2, '0');
+          const d = String(recordDate.getDate()).padStart(2, '0');
+          const recYMD = `${y}-${m}-${d}`;
+          if (recYMD !== selectedDate) return false;
+        } else {
+          if (recordDate < fiveDaysAgo) return false;
+        }
 
         const code = (u.coupon_code || '').toLowerCase();
         const customer = (u.customer_id || '').toLowerCase();
@@ -786,7 +822,7 @@
       });
 
       if (filtered.length === 0) {
-        container.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted); text-align:center; padding: 12px;">No undo transactions found in the last 5 days matching your search.</p>';
+        container.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted); text-align:center; padding: 12px;">No undo transactions found matching your search or date filter.</p>';
         return;
       }
 
