@@ -1105,17 +1105,45 @@
         const container = document.getElementById('promoList');
         container.innerHTML = '';
 
-        if (data.promotions.length === 0) {
-          container.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted);">No promotions found in database.</p>';
-          return;
-        }
-
         const token = getAuthToken();
         const payload = parseJwt(token);
         const role = payload ? payload.role.toLowerCase() : 'guest';
         const isCashierOrBetter = role === 'admin' || role === 'shift_manager' || role === 'cashier';
 
-        data.promotions.forEach(promo => {
+        const now = new Date();
+        const activePromotions = [];
+
+        for (const promo of data.promotions) {
+          if (promo.expires_at) {
+            const expStr = String(promo.expires_at).includes('T')
+              ? promo.expires_at
+              : String(promo.expires_at).replace(' ', 'T');
+            const expDate = new Date(expStr);
+
+            if (!isNaN(expDate.getTime()) && expDate <= now) {
+              // Automatically delete expired promotion from PostgreSQL
+              if (token) {
+                fetch('/api/promotions/delete', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                  },
+                  body: JSON.stringify({ code: promo.code })
+                }).catch(err => console.error('Auto-delete failed:', err));
+              }
+              continue; // Skip rendering this expired promo
+            }
+          }
+          activePromotions.push(promo);
+        }
+
+        if (activePromotions.length === 0) {
+          container.innerHTML = '<p style="font-size:0.8rem; color:var(--text-muted);">No promotions found in database.</p>';
+          return;
+        }
+
+        activePromotions.forEach(promo => {
           const div = document.createElement('div');
           div.className = 'list-item';
           const isActive = promo.is_active;
