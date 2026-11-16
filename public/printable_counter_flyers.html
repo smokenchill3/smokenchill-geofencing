@@ -19,48 +19,58 @@
 
     body {
       margin: 0;
-      padding: 20px;
+      padding: 40px 20px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background-color: #0b0d12;
       color: var(--text);
       display: flex;
-      justify-content: center;
+      flex-direction: column;
       align-items: center;
-      min-height: 100vh;
+      gap: 60px;
     }
 
-    .flyers-wrapper {
-      display: flex;
-      gap: 30px;
-      max-width: 1200px;
+    .page-container {
       width: 100%;
-      justify-content: center;
-      flex-wrap: wrap;
+      max-width: 600px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .page-label {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 12px;
+      align-self: flex-start;
+      margin-left: 10px;
     }
 
     .flyer {
       background-color: var(--card-bg);
       border: 2px solid rgba(255, 255, 255, 0.1);
-      border-radius: 20px;
-      padding: 30px;
-      width: 450px;
+      border-radius: 24px;
+      padding: 40px 30px;
+      width: 100%;
       box-sizing: border-box;
       text-align: center;
       box-shadow: 0 15px 35px rgba(0,0,0,0.4);
     }
 
     h1 {
-      font-size: 1.8rem;
+      font-size: 2rem;
       margin: 0 0 5px 0;
       color: #ffffff;
       letter-spacing: 1px;
     }
 
     .subtitle {
-      font-size: 1rem;
+      font-size: 1.1rem;
       color: var(--accent);
       font-weight: 700;
-      margin-bottom: 20px;
+      margin-bottom: 25px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
@@ -70,17 +80,17 @@
       background-color: rgba(34, 197, 94, 0.15);
       color: var(--accent);
       border: 1px solid rgba(34, 197, 94, 0.3);
-      padding: 8px 16px;
+      padding: 10px 20px;
       border-radius: 25px;
-      font-size: 0.95rem;
+      font-size: 1.05rem;
       font-weight: 600;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
     }
 
     .address {
-      font-size: 0.9rem;
+      font-size: 1rem;
       color: var(--muted);
-      margin-bottom: 15px;
+      margin-bottom: 18px;
     }
 
     .age-badge {
@@ -88,11 +98,11 @@
       background-color: rgba(239, 68, 68, 0.15);
       color: var(--danger);
       border: 1px solid rgba(239, 68, 68, 0.3);
-      padding: 6px 14px;
+      padding: 8px 16px;
       border-radius: 20px;
-      font-size: 0.85rem;
+      font-size: 0.9rem;
       font-weight: 700;
-      margin-bottom: 25px;
+      margin-bottom: 30px;
     }
 
     .qr-box {
@@ -100,32 +110,32 @@
       padding: 15px;
       border-radius: 16px;
       display: inline-block;
-      margin-bottom: 20px;
+      margin-bottom: 25px;
       box-shadow: 0 8px 20px rgba(0,0,0,0.3);
     }
 
     .scan-instruction {
-      font-size: 1rem;
+      font-size: 1.1rem;
       font-weight: 600;
       color: #f8fafc;
-      margin-bottom: 20px;
+      margin-bottom: 25px;
       line-height: 1.4;
     }
 
     .perks-box {
       background: rgba(15, 23, 42, 0.6);
       border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 12px;
-      padding: 15px 20px;
+      border-radius: 14px;
+      padding: 18px 22px;
       text-align: left;
-      margin-bottom: 20px;
+      margin-bottom: 25px;
     }
 
     .perks-title {
-      font-size: 0.9rem;
+      font-size: 0.95rem;
       font-weight: 700;
       color: var(--warning);
-      margin-bottom: 8px;
+      margin-bottom: 10px;
       text-transform: uppercase;
       text-align: center;
     }
@@ -133,7 +143,7 @@
     .perks-box ul {
       margin: 0;
       padding-left: 20px;
-      font-size: 0.85rem;
+      font-size: 0.9rem;
       color: var(--muted);
       line-height: 1.6;
     }
@@ -142,28 +152,39 @@
       background-color: rgba(239, 68, 68, 0.15);
       color: var(--danger);
       border: 1px solid rgba(239, 68, 68, 0.3);
-      padding: 8px;
+      padding: 10px;
       border-radius: 8px;
-      font-size: 0.8rem;
+      font-size: 0.85rem;
       font-weight: 700;
       text-transform: uppercase;
       margin-bottom: 12px;
     }
 
     .footer-note {
-      font-size: 0.8rem;
+      font-size: 0.85rem;
       color: var(--warning);
       font-weight: 600;
     }
 
+    /* Print styling: forces each page container onto a separate physical page */
     @media print {
       body {
         background: white;
         padding: 0;
+        gap: 0;
+      }
+      .page-label {
+        display: none; /* Hide UI page labels when printing */
+      }
+      .page-container {
+        page-break-after: always;
+        break-after: page;
+        height: 100vh;
+        justify-content: center;
       }
       .flyer {
         background: white;
-        border: 2px solid #000;
+        border: none;
         box-shadow: none;
         color: black;
       }
@@ -182,8 +203,9 @@
 </head>
 <body>
 
-  <div class="flyers-wrapper">
-    <!-- Parmer Ln Flyer -->
+  <!-- Page 1: Parmer Ln -->
+  <div class="page-container">
+    <div class="page-label">📄 Page 1 — Parmer Ln Location</div>
     <div class="flyer">
       <h1>SMOKE N CHILL</h1>
       <div class="subtitle">Daily Deals & Wallet Passes</div>
@@ -212,8 +234,11 @@
       <div class="footer-warning">⚠️ No Double Discount.</div>
       <div class="footer-note">💳 Save deals directly to Google Wallet for easy tap-and-scan!</div>
     </div>
+  </div>
 
-    <!-- Research Blvd Flyer -->
+  <!-- Page 2: Research Blvd -->
+  <div class="page-container">
+    <div class="page-label">📄 Page 2 — Research Blvd Location</div>
     <div class="flyer">
       <h1>SMOKE N CHILL</h1>
       <div class="subtitle">Daily Deals & Wallet Passes</div>
@@ -251,7 +276,7 @@
       const researchUrl = 'https://smokenchill-geofencing.onrender.com/?store=research';
 
       QRCode.toCanvas(document.getElementById('qr-parmer'), parmerUrl, {
-        width: 200,
+        width: 220,
         margin: 1,
         color: {
           dark: '#000000',
@@ -260,7 +285,7 @@
       });
 
       QRCode.toCanvas(document.getElementById('qr-research'), researchUrl, {
-        width: 200,
+        width: 220,
         margin: 1,
         color: {
           dark: '#000000',
