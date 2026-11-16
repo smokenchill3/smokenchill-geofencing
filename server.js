@@ -5,6 +5,8 @@ const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const path = require('path');
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
 
 const app = express();
 const server = http.createServer(app);
@@ -18,8 +20,20 @@ const pool = new Pool({
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
 });
 
+// Security HTTP headers
+app.use(helmet({
+  contentSecurityPolicy: false, // Keep false if loading external assets like Socket.io / Google Fonts easily
+}));
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Rate limiter for login to prevent brute-force password attacks
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Limit each IP to 10 login attempts per window
+  message: { success: false, message: 'Too many login attempts from this IP, please try again after 15 minutes.' }
+});
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
@@ -84,7 +98,6 @@ async function initDb() {
       );
     `);
 
-    // Ensure columns exist on older databases
     await pool.query(`ALTER TABLE promotions ADD COLUMN IF NOT EXISTS location VARCHAR(50) DEFAULT 'all';`);
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS location VARCHAR(50) DEFAULT 'Research';`);
     await pool.query(`ALTER TABLE redemptions ADD COLUMN IF NOT EXISTS redeemed_by VARCHAR(50) DEFAULT 'system';`);
@@ -106,6 +119,7 @@ async function initDb() {
 
 initDb();
 
+// SECURED: Verifies token AND strictly enforces ADMIN role
 function verifyAdminToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   if (!authHeader) return res.status(401).json({ success: false, message: 'Access denied. Token missing.' });
@@ -113,6 +127,12 @@ function verifyAdminToken(req, res, next) {
   const token = authHeader.split(' ')[1];
   jwt.verify(token, JWT_SECRET, (err, decoded) => {
     if (err) return res.status(403).json({ success: false, message: 'Invalid or expired token.' });
+    
+    // Strict Role Enforcement
+    if (decoded.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Permission denied. Administrator access required.' });
+    }
+
     req.user = decoded;
     next();
   });
@@ -145,9 +165,13 @@ function verifyManagerToken(req, res, next) {
   });
 }
 
-// Login Endpoint — Embeds user location into JWT Token
-app.post('/api/auth/login', async (req, res) => {
+// Login Endpoint with Rate Limiting
+app.post('/api/auth/login', loginLimiter, async (req, res) => {
   const { username, password } = req.body;
+  if (!username || !password) {
+    return res.status(400).json({ success: false, message: 'Username and password required.' });
+  }
+
   try {
     const userResult = await pool.query('SELECT * FROM users WHERE username = $1', [username.trim().toLowerCase()]);
     if (userResult.rows.length === 0) {
@@ -163,7 +187,7 @@ app.post('/api/auth/login', async (req, res) => {
     const token = jwt.sign(
       { id: user.id, username: user.username, role: user.role, location: user.location || 'Research' }, 
       JWT_SECRET, 
-      { expiresIn: '12h' }
+      { expiresIn: '8h' } // Shorter shift-appropriate window
     );
     res.json({ success: true, message: 'Login successful!', token });
   } catch (err) {
@@ -172,7 +196,7 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // ==============================================
-// 3. Admin Staff Creation with Location Assignment
+// 3. Admin Staff Creation & Management
 // ==============================================
 app.get('/api/admin/users', verifyAdminToken, async (req, res) => {
   try {
@@ -226,7 +250,6 @@ app.post('/api/admin/add-user', verifyAdminToken, async (req, res) => {
   }
 });
 
-// Admin Redemption Audit Endpoint (Returns location for both Research & Parmer)
 app.get('/api/admin/redemption-history', verifyAdminToken, async (req, res) => {
   try {
     const result = await pool.query(`
@@ -241,7 +264,6 @@ app.get('/api/admin/redemption-history', verifyAdminToken, async (req, res) => {
   }
 });
 
-// Admin Undo History Audit Endpoint (Returns location for both Research & Parmer)
 app.get('/api/admin/undo-history', verifyAdminToken, async (req, res) => {
   try {
     const result = await pool.query(`
@@ -538,7 +560,6 @@ app.post('/api/redeem', verifyStaffToken, async (req, res) => {
       });
     }
 
-    // Insert redemption record auto-assigned to staff member's store location
     await pool.query(
       'INSERT INTO redemptions (coupon_code, customer_id, redeemed_by, location) VALUES ($1, $2, $3, $4)', 
       [code, customer, staffUser, storeLocation]
@@ -553,7 +574,6 @@ app.post('/api/redeem', verifyStaffToken, async (req, res) => {
   }
 });
 
-// Reset Cooldown (Undo Scan) — Auto-assigned to staff member's store location
 app.post('/api/cashier/reset-cooldown', verifyStaffToken, async (req, res) => {
   const { couponCode, customerId } = req.body;
   const staffUser = req.user ? req.user.username : 'unknown_staff';
@@ -576,7 +596,6 @@ app.post('/api/cashier/reset-cooldown', verifyStaffToken, async (req, res) => {
       [code, customer]
     );
 
-    // Record undo transaction auto-assigned to staff member's store location
     await pool.query(
       'INSERT INTO undo_transactions (coupon_code, customer_id, undone_by, location) VALUES ($1, $2, $3, $4)',
       [code, customer, staffUser, storeLocation]
