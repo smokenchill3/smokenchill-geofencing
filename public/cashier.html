@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Smoke N Chill — Cashier & Admin Portal</title>
   <script src="/socket.io/socket.io.js"></script>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
   <style>
     :root {
       --bg-dark: #0f1117;
@@ -100,7 +101,7 @@
     input:focus, select:focus {
       border-color: var(--accent-green);
     }
-   
+
     .btn {
       width: 100%;
       padding: 12px;
@@ -195,7 +196,7 @@
   </style>
 </head>
 <body>
-  
+
   <div class="header">
     <h1>Smoke N Chill — Cashier & Admin Portal</h1>
     <div style="display: flex; align-items: center; gap: 12px;">
@@ -211,7 +212,7 @@
     <div class="card" id="loginCard">
       <div class="card-title">🔑 Staff / Admin Login</div>
       <div class="card-subtitle">Log in with your assigned staff or manager credentials.</div>
-      
+
       <form id="loginForm" onsubmit="handleLogin(event)">
         <div class="form-group">
           <label for="username">Username</label>
@@ -226,11 +227,84 @@
       <div id="loginStatus" class="alert-status"></div>
     </div>
 
+    <!-- Scan / Redeem Coupon -->
+    <div class="card" id="redeemCard">
+      <div class="card-title">⚡ Scan / Redeem Coupon Code</div>
+      <div class="card-subtitle">Scan QR code or type promo code to redeem.</div>
+
+      <form id="redeemForm" onsubmit="handleRedeem(event)">
+        <div class="form-group">
+          <label for="couponCode">Coupon Code or QR Scan</label>
+          <input type="text" id="couponCode" placeholder="Scan QR or enter code..." required autofocus>
+        </div>
+        <button type="submit" class="btn">Redeem Coupon</button>
+      </form>
+
+      <!-- Temporary Undo Last Scan Button (60s Window with Live Timer) -->
+      <div id="undoContainer" style="display: none; margin-top: 10px; text-align: center;">
+        <button type="button" class="btn-danger" style="width: 100%; padding: 12px; font-size: 0.9rem; margin-bottom: 6px;" onclick="handleUndoScan()">
+          ↩️ Undo Last Scan (Accidental Scan)
+        </button>
+        <span id="undoTimerDisplay" style="font-size: 0.85rem; color: #ff5252; font-weight: 700; display: block; margin-top: 4px;"></span>
+      </div>
+
+      <div id="redeemStatus" class="alert-status"></div>
+    </div>
+
+    <!-- Store Inventory Controls (Moved into cashier middle spot) -->
+    <div class="card" id="inventoryCard">
+      <div class="card-title">📦 Store Inventory Controls</div>
+      <div class="card-subtitle">Toggle stock state or delete promotions from PostgreSQL.</div>
+
+      <div id="promoList" class="item-list"></div>
+    </div>
+
+    <!-- Backup Camera Scanner (Minimized by default on login; placed in former inventory spot) -->
+    <div class="card" id="cameraCard" style="display: none;">
+      <div class="card-title">📷 Backup Camera Scanner</div>
+      <div class="card-subtitle">Stays minimized on login. Open only as a backup camera scanner.</div>
+
+      <button type="button" id="toggleScannerBtn" class="btn-secondary" style="width: 100%; padding: 12px;" onclick="toggleCameraScanner()">
+        📷 Open Camera Scanner
+      </button>
+
+      <div id="cameraScannerContainer" style="display: none; margin-top: 12px; padding: 10px; background: #0b0d12; border: 1px solid var(--border-color); border-radius: 8px;">
+        <div id="qr-reader" style="width: 100%;"></div>
+      </div>
+    </div>
+
+    <!-- Create New Promotion (Admin & Shift Manager Only) -->
+    <div class="card" id="createPromoCard">
+      <div class="card-title">➕ Create New Promotion</div>
+      <div class="card-subtitle">Add a new deal that automatically syncs with PostgreSQL.</div>
+
+      <form id="createPromoForm" onsubmit="handleCreatePromo(event)">
+        <div class="form-group">
+          <label for="promoCodeInput">Promo Code</label>
+          <input type="text" id="promoCodeInput" placeholder="e.g. GLASS15" required>
+        </div>
+        <div class="form-group">
+          <label for="promoTitleInput">Offer Title / Description</label>
+          <input type="text" id="promoTitleInput" placeholder="e.g. 15% Off All Glassware" required>
+        </div>
+        <div class="form-group">
+          <label for="promoBadgeInput">Badge Text</label>
+          <input type="text" id="promoBadgeInput" placeholder="e.g. 15% OFF" required>
+        </div>
+        <div class="form-group">
+          <label for="promoExpInput">Expiration Date (Optional)</label>
+          <input type="date" id="promoExpInput">
+        </div>
+        <button type="submit" class="btn">Save & Publish Promotion</button>
+      </form>
+      <div id="createPromoStatus" class="alert-status"></div>
+    </div>
+
     <!-- Create Staff User with Store Location -->
     <div class="card" id="createUserCard">
       <div class="card-title">👤 Create Staff Account</div>
       <div class="card-subtitle">Create logins for shift managers or cashiers with assigned location.</div>
-      
+
       <form id="createUserForm" onsubmit="handleCreateUser(event)">
         <div class="form-group">
           <label for="newUsername">Username</label>
@@ -265,35 +339,11 @@
       </div>
     </div>
 
-    <!-- Scan / Redeem Coupon -->
-    <div class="card" id="redeemCard">
-      <div class="card-title">⚡ Scan / Redeem Coupon Code</div>
-      <div class="card-subtitle">Scan QR code or type promo code to redeem.</div>
-      
-      <form id="redeemForm" onsubmit="handleRedeem(event)">
-        <div class="form-group">
-          <label for="couponCode">Coupon Code or QR Scan</label>
-          <input type="text" id="couponCode" placeholder="Scan QR or enter code..." required autofocus>
-        </div>
-        <button type="submit" class="btn">Redeem Coupon</button>
-      </form>
-
-      <!-- Temporary Undo Last Scan Button (60s Window with Live Timer) -->
-      <div id="undoContainer" style="display: none; margin-top: 10px; text-align: center;">
-        <button type="button" class="btn-danger" style="width: 100%; padding: 12px; font-size: 0.9rem; margin-bottom: 6px;" onclick="handleUndoScan()">
-          ↩️ Undo Last Scan (Accidental Scan)
-        </button>
-        <span id="undoTimerDisplay" style="font-size: 0.85rem; color: #ff5252; font-weight: 700; display: block; margin-top: 4px;"></span>
-      </div>
-
-      <div id="redeemStatus" class="alert-status"></div>
-    </div>
-
     <!-- Admin View: Employee Redemption Activity (Vertical Stacked Filters) -->
     <div class="card" id="staffAuditCard" style="display: none;">
       <div class="card-title">📊 Employee Redemption Activity</div>
       <div class="card-subtitle">Track redemptions (Default: Last 5 Days | Select date range for custom view).</div>
-      
+
       <!-- Clean Stacked Filter Layout -->
       <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px;">
         <input type="text" id="redemptionSearch" placeholder="🔍 Search phone, customer, cashier, promo..." oninput="renderRedemptions()" style="width: 100%;">
@@ -312,7 +362,7 @@
     <div class="card" id="undoAuditCard" style="display: none;">
       <div class="card-title">🔍 Staff Undo Audit Log</div>
       <div class="card-subtitle">Track cancellations (Default: Last 5 Days | Select date range for custom view).</div>
-      
+
       <!-- Clean Stacked Filter Layout -->
       <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px;">
         <input type="text" id="undoSearch" placeholder="🔍 Search phone, customer, staff, promo..." oninput="renderUndos()" style="width: 100%;">
@@ -327,38 +377,11 @@
       <div id="undoAuditList" class="item-list"></div>
     </div>
 
-    <!-- Create New Promotion -->
-    <div class="card" id="createPromoCard">
-      <div class="card-title">➕ Create New Promotion</div>
-      <div class="card-subtitle">Add a new deal that automatically syncs with PostgreSQL.</div>
-      
-      <form id="createPromoForm" onsubmit="handleCreatePromo(event)">
-        <div class="form-group">
-          <label for="promoCodeInput">Promo Code</label>
-          <input type="text" id="promoCodeInput" placeholder="e.g. GLASS15" required>
-        </div>
-        <div class="form-group">
-          <label for="promoTitleInput">Offer Title / Description</label>
-          <input type="text" id="promoTitleInput" placeholder="e.g. 15% Off All Glassware" required>
-        </div>
-        <div class="form-group">
-          <label for="promoBadgeInput">Badge Text</label>
-          <input type="text" id="promoBadgeInput" placeholder="e.g. 15% OFF" required>
-        </div>
-        <div class="form-group">
-          <label for="promoExpInput">Expiration Date (Optional)</label>
-          <input type="date" id="promoExpInput">
-        </div>
-        <button type="submit" class="btn">Save & Publish Promotion</button>
-      </form>
-      <div id="createPromoStatus" class="alert-status"></div>
-    </div>
-
     <!-- Store Announcements & Emergency Notices -->
     <div class="card" id="announcementCard">
       <div class="card-title">📢 Post Store Announcement / Closure Notice</div>
       <div class="card-subtitle">Broadcast emergency notices or upcoming offer newsletters.</div>
-      
+
       <form id="announcementForm" onsubmit="handlePostAnnouncement(event)">
         <div class="form-group">
           <label for="annTitle">Title</label>
@@ -385,14 +408,6 @@
         <div id="adminAnnouncementsList" class="item-list"></div>
       </div>
     </div>
-
-    <!-- Store Inventory Controls -->
-    <div class="card" id="inventoryCard">
-      <div class="card-title">📦 Store Inventory Controls</div>
-      <div class="card-subtitle">Toggle stock state or delete promotions from PostgreSQL.</div>
-      
-      <div id="promoList" class="item-list"></div>
-    </div>
   </div>
 
   <script>
@@ -402,6 +417,8 @@
     let countdownInterval = null;
     let allRedemptions = [];
     let allUndos = [];
+    let html5QrCode = null;
+    let isScannerOpen = false;
 
     document.addEventListener('DOMContentLoaded', () => {
       updateSessionUI();
@@ -439,20 +456,77 @@
       }
     }
 
+    async function closeCameraScanner() {
+      const container = document.getElementById('cameraScannerContainer');
+      const btn = document.getElementById('toggleScannerBtn');
+
+      if (html5QrCode && isScannerOpen) {
+        try {
+          await html5QrCode.stop();
+          html5QrCode.clear();
+        } catch (err) {
+          console.error('Failed stopping scanner:', err);
+        }
+      }
+      isScannerOpen = false;
+      if (container) container.style.display = 'none';
+      if (btn) btn.textContent = '📷 Open Camera Scanner';
+    }
+
+    async function toggleCameraScanner() {
+      const container = document.getElementById('cameraScannerContainer');
+      const btn = document.getElementById('toggleScannerBtn');
+      const couponInput = document.getElementById('couponCode');
+
+      if (!isScannerOpen) {
+        container.style.display = 'block';
+        btn.textContent = '✖ Minimize Camera';
+        isScannerOpen = true;
+
+        if (!html5QrCode) {
+          html5QrCode = new Html5Qrcode('qr-reader');
+        }
+
+        try {
+          await html5QrCode.start(
+            { facingMode: 'environment' },
+            { fps: 10, qrbox: { width: 220, height: 220 } },
+            async (decodedText) => {
+              if (couponInput) {
+                couponInput.value = decodedText;
+                couponInput.focus();
+              }
+              await closeCameraScanner();
+            }
+          );
+        } catch (err) {
+          console.error('Camera error:', err);
+          showStatus('redeemStatus', 'Unable to access camera. Check browser permissions.', false);
+          await closeCameraScanner();
+        }
+      } else {
+        await closeCameraScanner();
+      }
+    }
+
     function updateSessionUI() {
       const token = getAuthToken();
       const statusEl = document.getElementById('sessionStatus');
       const logoutBtn = document.getElementById('logoutBtn');
       const loginCard = document.getElementById('loginCard');
       const managerSection = document.getElementById('adminManagerListSection');
-      
+
       const createUserCard = document.getElementById('createUserCard');
       const createPromoCard = document.getElementById('createPromoCard');
       const announcementCard = document.getElementById('announcementCard');
       const redeemCard = document.getElementById('redeemCard');
       const inventoryCard = document.getElementById('inventoryCard');
+      const cameraCard = document.getElementById('cameraCard');
       const staffAuditCard = document.getElementById('staffAuditCard');
       const undoAuditCard = document.getElementById('undoAuditCard');
+
+      // Keep camera scanner minimized whenever session state updates
+      closeCameraScanner();
 
       if (token) {
         const payload = parseJwt(token);
@@ -468,16 +542,18 @@
 
         if (redeemCard) redeemCard.style.display = 'block';
         if (inventoryCard) inventoryCard.style.display = 'block';
+        if (cameraCard) cameraCard.style.display = 'block';
 
         if (role === 'cashier') {
+          if (createPromoCard) createPromoCard.style.display = 'none';
           if (createUserCard) createUserCard.style.display = 'none';
-          if (createPromoCard) createUserCard.style.display = 'none';
           if (announcementCard) announcementCard.style.display = 'none';
           if (staffAuditCard) staffAuditCard.style.display = 'none';
           if (undoAuditCard) undoAuditCard.style.display = 'none';
+          if (managerSection) managerSection.style.display = 'none';
         } else {
-          if (createUserCard) createUserCard.style.display = 'block';
           if (createPromoCard) createPromoCard.style.display = 'block';
+          if (createUserCard) createUserCard.style.display = 'block';
           if (announcementCard) announcementCard.style.display = 'block';
           if (staffAuditCard) staffAuditCard.style.display = 'block';
           if (undoAuditCard) undoAuditCard.style.display = 'block';
@@ -494,10 +570,11 @@
         if (managerSection) managerSection.style.display = 'none';
 
         if (createUserCard) createUserCard.style.display = 'none';
-        if (createPromoCard) createUserCard.style.display = 'none';
+        if (createPromoCard) createPromoCard.style.display = 'none';
         if (announcementCard) announcementCard.style.display = 'none';
         if (redeemCard) redeemCard.style.display = 'none';
         if (inventoryCard) inventoryCard.style.display = 'none';
+        if (cameraCard) cameraCard.style.display = 'none';
         if (staffAuditCard) staffAuditCard.style.display = 'none';
         if (undoAuditCard) undoAuditCard.style.display = 'none';
       }
@@ -505,7 +582,7 @@
 
     function handleLogout() {
       localStorage.removeItem('adminToken');
-      
+
       // Clear username and password inputs on logout
       const loginForm = document.getElementById('loginForm');
       if (loginForm) loginForm.reset();
@@ -517,6 +594,7 @@
 
     function showStatus(elementId, message, isSuccess) {
       const el = document.getElementById(elementId);
+      if (!el) return;
       el.textContent = message;
       el.className = `alert-status ${isSuccess ? 'alert-success' : 'alert-error'}`;
       el.style.display = 'block';
@@ -688,10 +766,10 @@
       const searchInput = document.getElementById('redemptionSearch');
       const startDateInput = document.getElementById('redemptionStartDate');
       const endDateInput = document.getElementById('redemptionEndDate');
-      
+
       const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
-      const startDateStr = startDateInput ? startDateInput.value : ''; 
-      const endDateStr = endDateInput ? endDateInput.value : '';         
+      const startDateStr = startDateInput ? startDateInput.value : '';
+      const endDateStr = endDateInput ? endDateInput.value : '';
 
       if (!container) return;
 
@@ -752,7 +830,7 @@
             <div class="list-item" style="margin-left: 2px; margin-right: 2px;">
               <div style="width: 100%;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                  <strong style="font-size:0.85rem; color:#fff;">${r.coupon_code}</strong> 
+                  <strong style="font-size:0.85rem; color:#fff;">${r.coupon_code}</strong>
                   <span class="badge ${loc === 'Parmer' ? 'badge-emergency' : 'badge-active'}">📍 ${loc}</span>
                 </div>
                 <span style="font-size:0.75rem; color:var(--text-muted);">(Customer: ${r.customer_id})</span>
@@ -811,10 +889,10 @@
       const searchInput = document.getElementById('undoSearch');
       const startDateInput = document.getElementById('undoStartDate');
       const endDateInput = document.getElementById('undoEndDate');
-      
+
       const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
-      const startDateStr = startDateInput ? startDateInput.value : ''; 
-      const endDateStr = endDateInput ? endDateInput.value : '';         
+      const startDateStr = startDateInput ? startDateInput.value : '';
+      const endDateStr = endDateInput ? endDateInput.value : '';
 
       if (!container) return;
 
@@ -875,7 +953,7 @@
             <div class="list-item" style="margin-left: 2px; margin-right: 2px;">
               <div style="width: 100%;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                  <strong style="font-size:0.85rem; color:#fff;">${u.coupon_code}</strong> 
+                  <strong style="font-size:0.85rem; color:#fff;">${u.coupon_code}</strong>
                   <span class="badge ${loc === 'Parmer' ? 'badge-emergency' : 'badge-active'}">📍 ${loc}</span>
                 </div>
                 <span style="font-size:0.75rem; color:var(--text-muted);">(Customer: ${u.customer_id})</span>
@@ -907,7 +985,7 @@
       try {
         const res = await fetch('/api/redeem', {
           method: 'POST',
-          headers: { 
+          headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
@@ -959,7 +1037,7 @@
       try {
         const res = await fetch('/api/cashier/reset-cooldown', {
           method: 'POST',
-          headers: { 
+          headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
@@ -989,7 +1067,7 @@
       const title = document.getElementById('promoTitleInput').value;
       const discountText = document.getElementById('promoBadgeInput').value;
       const expVal = document.getElementById('promoExpInput').value;
-      
+
       const expiresAt = expVal ? `${expVal} 23:59:59` : '2026-12-31 23:59:59';
 
       try {
